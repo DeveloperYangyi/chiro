@@ -6,10 +6,8 @@ type Product = Schema["Product"]["type"];
 
 const emptyForm = {
   name: "",
-  sku: "",
   unitPrice: "",
   quantity: "",
-  unit: "",
   note: "",
 };
 
@@ -44,10 +42,8 @@ function StockPage() {
     }
     const payload = {
       name: form.name.trim(),
-      sku: form.sku.trim() || null,
       unitPrice: parseFloat(form.unitPrice) || 0,
       quantity: parseInt(form.quantity, 10) || 0,
-      unit: form.unit.trim() || null,
       note: form.note.trim() || null,
     };
 
@@ -63,10 +59,8 @@ function StockPage() {
     setEditingId(p.id);
     setForm({
       name: p.name ?? "",
-      sku: p.sku ?? "",
       unitPrice: p.unitPrice != null ? String(p.unitPrice) : "",
       quantity: p.quantity != null ? String(p.quantity) : "",
-      unit: p.unit ?? "",
       note: p.note ?? "",
     });
   }
@@ -86,10 +80,7 @@ function StockPage() {
   const filtered = products.filter((p) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return (
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.sku ?? "").toLowerCase().includes(q)
-    );
+    return (p.name ?? "").toLowerCase().includes(q);
   });
 
   return (
@@ -100,22 +91,16 @@ function StockPage() {
           <label>
             商品名稱 *
             <input
+              required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="請輸入商品名稱"
             />
           </label>
           <label>
-            商品編號
+            單價 *
             <input
-              value={form.sku}
-              onChange={(e) => setForm({ ...form, sku: e.target.value })}
-              placeholder="SKU"
-            />
-          </label>
-          <label>
-            單價
-            <input
+              required
               type="number"
               step="0.01"
               min="0"
@@ -125,22 +110,15 @@ function StockPage() {
             />
           </label>
           <label>
-            庫存數量
+            庫存數量 *
             <input
+              required
               type="number"
               step="1"
               min="0"
               value={form.quantity}
               onChange={(e) => setForm({ ...form, quantity: e.target.value })}
               placeholder="0"
-            />
-          </label>
-          <label>
-            單位
-            <input
-              value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value })}
-              placeholder="件 / 箱 / 個"
             />
           </label>
           <label className="full">
@@ -171,7 +149,7 @@ function StockPage() {
             className="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋商品名稱或編號"
+            placeholder="搜尋商品名稱"
           />
         </div>
         <div className="table-wrap">
@@ -179,17 +157,15 @@ function StockPage() {
             <thead>
               <tr>
                 <th>商品名稱</th>
-                <th>編號</th>
                 <th className="num">單價</th>
                 <th className="num">庫存</th>
-                <th>單位</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty">
+                  <td colSpan={4} className="empty">
                     尚無商品資料
                   </td>
                 </tr>
@@ -197,7 +173,6 @@ function StockPage() {
               {filtered.map((p) => (
                 <tr key={p.id} className={(p.quantity ?? 0) === 0 ? "out-of-stock" : ""}>
                   <td>{p.name}</td>
-                  <td>{p.sku || "—"}</td>
                   <td className="num">${(p.unitPrice ?? 0).toFixed(2)}</td>
                   <td className="num">
                     <div className="qty-cell">
@@ -218,7 +193,6 @@ function StockPage() {
                       </button>
                     </div>
                   </td>
-                  <td>{p.unit || "—"}</td>
                   <td>
                     <div className="row-actions">
                       <button className="btn-link" onClick={() => handleEdit(p)}>

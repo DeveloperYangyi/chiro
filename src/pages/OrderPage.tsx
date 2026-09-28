@@ -7,6 +7,7 @@ type Customer = Schema["Customer"]["type"];
 type Product = Schema["Product"]["type"];
 type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
+type Operator = Schema["Operator"]["type"];
 
 interface DraftLine {
   productId: string;
@@ -14,13 +15,9 @@ interface DraftLine {
   unitPrice: number;
   quantity: number;
   stock: number;
+  subtotalOverride: number | null;
 }
 
-const statusLabel: Record<string, string> = {
-  PENDING: "待處理",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -30,14 +27,19 @@ function OrderPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
 
   // 新訂單草稿
   const [customerId, setCustomerId] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [operatorId, setOperatorId] = useState("");
   const [orderDate, setOrderDate] = useState(today());
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [includeTax, setIncludeTax] = useState(false);
 
   // 列印用
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
@@ -68,17 +70,28 @@ function OrderPage() {
           )
         ),
     });
+    const opSub = client.models.Operator.observeQuery().subscribe({
+      next: (data) =>
+        setOperators(
+          [...data.items].sort((a, b) =>
+            (a.name ?? "").localeCompare(b.name ?? "")
+          )
+        ),
+    });
     return () => {
       cSub.unsubscribe();
       pSub.unsubscribe();
       oSub.unsubscribe();
+      opSub.unsubscribe();
     };
   }, []);
 
-  const total = useMemo(
-    () => lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0),
+  const subtotal = useMemo(
+    () => lines.reduce((sum, l) => sum + (l.subtotalOverride ?? l.unitPrice * l.quantity), 0),
     [lines]
   );
+  const tax = includeTax ? subtotal * 0.05 : 0;
+  const total = Math.ceil(subtotal + tax);
 
   function addLine() {
     if (!selectedProductId) return;
@@ -96,6 +109,7 @@ function OrderPage() {
         unitPrice: p.unitPrice ?? 0,
         quantity: 1,
         stock: p.quantity ?? 0,
+        subtotalOverride: null,
       },
     ]);
     setSelectedProductId("");
@@ -104,7 +118,18 @@ function OrderPage() {
   function updateLineQty(productId: string, qty: number) {
     setLines((prev) =>
       prev.map((l) =>
-        l.productId === productId ? { ...l, quantity: Math.max(1, qty) } : l
+        l.productId === productId ? { ...l, quantity: Math.max(1, qty), subtotalOverride: null } : l
+      )
+    );
+  }
+
+  function updateLineSubtotal(productId: string, value: string) {
+    const num = parseFloat(value);
+    setLines((prev) =>
+      prev.map((l) =>
+        l.productId === productId
+          ? { ...l, subtotalOverride: value === "" ? null : (isNaN(num) ? l.subtotalOverride : num) }
+          : l
       )
     );
   }
@@ -115,15 +140,22 @@ function OrderPage() {
 
   function resetDraft() {
     setCustomerId("");
+    setCustomerSearch("");
+    setOperatorId("");
     setOrderDate(today());
     setNote("");
     setLines([]);
     setSelectedProductId("");
+    setIncludeTax(false);
   }
 
   async function saveOrder() {
     if (!customerId) {
       alert("請選擇客戶");
+      return;
+    }
+    if (!operatorId) {
+      alert("請選擇工程師");
       return;
     }
     if (lines.length === 0) {
@@ -145,6 +177,7 @@ function OrderPage() {
       // 若庫存不足或中途失敗，伺服器會回滾，不會留下部分成功的資料。
       const { data, errors } = await client.mutations.placeOrder({
         customerId,
+        operatorId,
         orderDate,
         note: note.trim() || undefined,
         items: JSON.stringify(
@@ -170,10 +203,6 @@ function OrderPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function updateStatus(order: Order, status: Order["status"]) {
-    await client.models.Order.update({ id: order.id, status });
   }
 
   async function deleteOrder(order: Order) {
@@ -204,33 +233,77 @@ function OrderPage() {
         <div className="form-grid">
           <label>
             客戶 *
+            <div className="search-select">
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={(e) => {
+                  setCustomerSearch(e.target.value);
+                  setCustomerId("");
+                  setShowCustomerDropdown(true);
+                }}
+                onFocus={() => setShowCustomerDropdown(true)}
+                placeholder="搜尋客戶姓名或電話"
+              />
+              {showCustomerDropdown && customerSearch.trim() !== "" && (
+                <ul className="search-select-list">
+                  {customers
+                    .filter((c) => {
+                      const q = customerSearch.trim().toLowerCase();
+                      return (
+                        (c.name ?? "").toLowerCase().includes(q) ||
+                        (c.phone ?? "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((c) => (
+                      <li
+                        key={c.id}
+                        className="search-select-item"
+                        onMouseDown={() => {
+                          setCustomerId(c.id);
+                          setCustomerSearch(`${c.name}${c.phone ? `（${c.phone}）` : ""}`);
+                          setShowCustomerDropdown(false);
+                        }}
+                      >
+                        {c.name}
+                        {c.phone ? `（${c.phone}）` : ""}
+                      </li>
+                    ))}
+                  {customers.filter((c) => {
+                    const q = customerSearch.trim().toLowerCase();
+                    return (
+                      (c.name ?? "").toLowerCase().includes(q) ||
+                      (c.phone ?? "").toLowerCase().includes(q)
+                    );
+                  }).length === 0 && (
+                    <li className="search-select-empty">找不到符合的客戶</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          </label>
+          <label>
+            工程師 *
             <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              required
+              value={operatorId}
+              onChange={(e) => setOperatorId(e.target.value)}
             >
-              <option value="">請選擇客戶</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.phone ? `（${c.phone}）` : ""}
+              <option value="">請選擇工程師</option>
+              {operators.map((op) => (
+                <option key={op.id} value={op.id}>
+                  {op.name}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            訂單日期
+            訂單日期 *
             <input
+              required
               type="date"
               value={orderDate}
               onChange={(e) => setOrderDate(e.target.value)}
-            />
-          </label>
-          <label className="full">
-            備註
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="備註"
             />
           </label>
         </div>
@@ -256,11 +329,11 @@ function OrderPage() {
           <table>
             <thead>
               <tr>
-                <th>商品名稱</th>
-                <th className="num">單價</th>
-                <th className="num">數量</th>
-                <th className="num">小計</th>
-                <th></th>
+                <th style={{ width: "30%" }}>商品名稱</th>
+                <th style={{ width: "15%" }}>單價</th>
+                <th style={{ width: "22%" }}>數量</th>
+                <th style={{ width: "18%" }}>小計</th>
+                <th style={{ width: "15%" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -274,8 +347,8 @@ function OrderPage() {
               {lines.map((l) => (
                 <tr key={l.productId} className={l.quantity > l.stock ? "out-of-stock" : ""}>
                   <td>{l.productName}</td>
-                  <td className="num">${l.unitPrice.toFixed(2)}</td>
-                  <td className="num">
+                  <td>${l.unitPrice.toFixed(2)}</td>
+                  <td>
                     <input
                       className="qty-input"
                       type="number"
@@ -287,7 +360,16 @@ function OrderPage() {
                     />
                     <span className="stock-hint">/ 庫存 {l.stock}</span>
                   </td>
-                  <td className="num">${(l.unitPrice * l.quantity).toFixed(2)}</td>
+                  <td>
+                    <input
+                      className="subtotal-input"
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={l.subtotalOverride ?? Math.round(l.unitPrice * l.quantity)}
+                      onChange={(e) => updateLineSubtotal(l.productId, e.target.value)}
+                    />
+                  </td>
                   <td>
                     <button
                       className="btn-link danger"
@@ -303,8 +385,25 @@ function OrderPage() {
         </div>
 
         <div className="order-total-row">
-          <span>訂單總金額：</span>
-          <span className="order-total">${total.toFixed(2)}</span>
+          <label className="tax-check">
+            <input
+              type="checkbox"
+              checked={includeTax}
+              onChange={(e) => setIncludeTax(e.target.checked)}
+            />
+            含 5% 稅
+          </label>
+          <div className="total-detail">
+            {includeTax && (
+              <>
+                <span className="subtotal-line">小計：${subtotal.toFixed(2)}</span>
+                <span className="tax-line">稅金（5%）：${tax.toFixed(2)}</span>
+              </>
+            )}
+            <span>
+              訂單總金額：<span className="order-total">${total.toFixed(2)}</span>
+            </span>
+          </div>
         </div>
 
         <div className="form-actions">
@@ -326,8 +425,8 @@ function OrderPage() {
                 <th>日期</th>
                 <th>客戶</th>
                 <th>電話</th>
+                <th>工程師</th>
                 <th className="num">總金額</th>
-                <th>狀態</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -344,20 +443,8 @@ function OrderPage() {
                   <td>{o.orderDate || "—"}</td>
                   <td>{o.customerName || "—"}</td>
                   <td>{o.customerPhone || "—"}</td>
+                  <td>{o.operatorName || "—"}</td>
                   <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
-                  <td>
-                    <select
-                      className="status-select"
-                      value={o.status ?? "PENDING"}
-                      onChange={(e) =>
-                        updateStatus(o, e.target.value as Order["status"])
-                      }
-                    >
-                      <option value="PENDING">{statusLabel.PENDING}</option>
-                      <option value="COMPLETED">{statusLabel.COMPLETED}</option>
-                      <option value="CANCELLED">{statusLabel.CANCELLED}</option>
-                    </select>
-                  </td>
                   <td>
                     <div className="row-actions">
                       <button className="btn-link" onClick={() => openPrint(o)}>

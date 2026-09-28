@@ -12,7 +12,7 @@ import '@aws-amplify/ui-react/styles.css';
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <Authenticator>
+      <Authenticator hideSignUp>
         <App />
       </Authenticator>
     </ErrorBoundary>

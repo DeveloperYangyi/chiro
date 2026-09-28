@@ -26,6 +26,7 @@ const client = generateClient<Schema>();
 type HandlerArgs = {
   arguments: {
     customerId: string;
+    operatorId?: string | null;
     orderDate?: string | null;
     note?: string | null;
     // JSON 字串：[{ productId, quantity }]
@@ -36,7 +37,7 @@ type HandlerArgs = {
 type LineInput = { productId: string; quantity: number };
 
 export const handler = async (event: HandlerArgs) => {
-  const { customerId, orderDate, note, items } = event.arguments;
+  const { customerId, operatorId, orderDate, note, items } = event.arguments;
 
   let lines: LineInput[];
   try {
@@ -55,6 +56,13 @@ export const handler = async (event: HandlerArgs) => {
     await client.models.Customer.get({ id: customerId });
   if (customerErrors) throw new Error(customerErrors.map((e) => e.message).join("; "));
   if (!customer) throw new Error("找不到指定的客戶");
+
+  // 1-b. 讀取工程師（可選）
+  let operatorName: string | null = null;
+  if (operatorId) {
+    const { data: operator } = await client.models.Operator.get({ id: operatorId });
+    if (operator) operatorName = operator.name;
+  }
 
   // 2. 讀取商品並驗證庫存
   const resolved = await Promise.all(
@@ -86,6 +94,8 @@ export const handler = async (event: HandlerArgs) => {
     customerName: customer.name,
     customerPhone: customer.phone,
     customerAddress: customer.address,
+    operatorId: operatorId ?? null,
+    operatorName,
     orderDate: orderDate ?? new Date().toISOString().slice(0, 10),
     status: "PENDING",
     totalPrice,

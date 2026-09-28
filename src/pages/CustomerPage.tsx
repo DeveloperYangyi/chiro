@@ -50,6 +50,14 @@ function CustomerPage() {
       alert("請輸入客戶姓名");
       return;
     }
+    if (!form.phone.trim()) {
+      alert("請輸入電話號碼");
+      return;
+    }
+    if (!form.address.trim()) {
+      alert("請輸入地址");
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       phone: form.phone.trim() || null,
@@ -113,22 +121,25 @@ function CustomerPage() {
           <label>
             客戶姓名 *
             <input
+              required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="請輸入客戶姓名"
             />
           </label>
           <label>
-            電話號碼
+            電話號碼 *
             <input
+              required
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="電話號碼"
             />
           </label>
           <label className="full">
-            地址
+            地址 *
             <input
+              required
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               placeholder="送貨地址"
@@ -172,13 +183,14 @@ function CustomerPage() {
                 <th>姓名</th>
                 <th>電話</th>
                 <th>地址</th>
+                <th>備註</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="empty">
+                  <td colSpan={5} className="empty">
                     尚無客戶資料
                   </td>
                 </tr>
@@ -188,6 +200,7 @@ function CustomerPage() {
                   <td>{c.name}</td>
                   <td>{c.phone || "—"}</td>
                   <td>{c.address || "—"}</td>
+                  <td>{c.note || "—"}</td>
                   <td>
                     <div className="row-actions">
                       <button className="btn-link" onClick={() => openHistory(c)}>

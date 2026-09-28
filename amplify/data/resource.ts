@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import { placeOrder } from "../functions/place-order/resource";
+import { adminUsers } from "../functions/admin-users/resource";
 
 /*== 倉庫管理系統 資料模型 =================================================
 定義四個模型：
@@ -10,6 +11,16 @@ import { placeOrder } from "../functions/place-order/resource";
 授權採用 API Key，任何以 API Key 驗證的使用者皆可進行 CRUDL 操作。
 =========================================================================*/
 const schema = a.schema({
+  // 工程師／操作人員
+  Operator: a
+    .model({
+      name: a.string().required(), // 姓名
+      role: a.enum(["ENGINEER", "ADMIN", "SALES"]), // 角色
+      phone: a.string(), // 電話
+      note: a.string(), // 備註
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
   // 商品／庫存
   Product: a
     .model({
@@ -42,6 +53,8 @@ const schema = a.schema({
       customerName: a.string(),
       customerPhone: a.string(),
       customerAddress: a.string(),
+      operatorId: a.id(), // 工程師 ID
+      operatorName: a.string(), // 工程師姓名（快照）
       orderDate: a.date(), // 訂單日期
       status: a.enum(["PENDING", "COMPLETED", "CANCELLED"]), // 待處理／已完成／已取消
       totalPrice: a.float().required().default(0), // 訂單總金額
@@ -75,6 +88,7 @@ const schema = a.schema({
     .mutation()
     .arguments({
       customerId: a.string().required(),
+      operatorId: a.string(),
       orderDate: a.string(),
       note: a.string(),
       // JSON 字串：[{ productId, quantity }]
@@ -83,10 +97,21 @@ const schema = a.schema({
     .returns(a.ref("PlaceOrderResult"))
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(placeOrder)),
+  // 帳號管理（僅 ADMINS 群組可呼叫）
+  adminUsers: a
+    .mutation()
+    .arguments({
+      action: a.string().required(),
+      email: a.string(),
+      displayName: a.string(),
+      tempPassword: a.string(),
+      group: a.string(),
+    })
+    .returns(a.string())
+    .authorization((allow) => [allow.group("ADMINS")])
+    .handler(a.handler.function(adminUsers)),
 })
-  // 授權 place-order 函式存取整個 Data API（以便在伺服器端查詢／建立模型）。
-  // 這也會將 AMPLIFY_DATA_DEFAULT_NAME 等環境變數注入該函式。
-  .authorization((allow) => [allow.resource(placeOrder)]);
+  .authorization((allow) => [allow.resource(placeOrder), allow.resource(adminUsers)]);
 
 export type Schema = ClientSchema<typeof schema>;
 
