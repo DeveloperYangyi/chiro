@@ -1,18 +1,20 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Authenticator } from '@aws-amplify/ui-react';
+// 先載入 client.ts，確保在任何頁面模組執行 generateClient() 之前
+// 已呼叫 Amplify.configure()。
+import "./client";
 import App from "./App.tsx";
+import ErrorBoundary from "./ErrorBoundary";
 import "./index.css";
 import '@aws-amplify/ui-react/styles.css';
-import { Amplify } from "aws-amplify";
-import outputs from "../amplify_outputs.json";
-
-Amplify.configure(outputs);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Authenticator>
-      <App />
-    </Authenticator>
+    <ErrorBoundary>
+      <Authenticator>
+        <App />
+      </Authenticator>
+    </ErrorBoundary>
   </React.StrictMode>
 );
