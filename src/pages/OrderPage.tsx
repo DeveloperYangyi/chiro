@@ -198,7 +198,7 @@ function OrderPage() {
     }
     setSaving(true);
     try {
-      const { data, errors } = await client.mutations.placeOrder({
+      const { errors } = await client.mutations.placeOrder({
         customerId,
         operatorId,
         createdBy: currentUserName,
