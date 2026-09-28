@@ -4,28 +4,27 @@ import { client } from "../client";
 
 type Customer = Schema["Customer"]["type"];
 type Order = Schema["Order"]["type"];
+type Payment = Schema["Payment"]["type"];
 
 const emptyForm = {
   name: "",
   phone: "",
+  phone2: "",
   address: "",
   note: "",
-};
-
-const statusLabel: Record<string, string> = {
-  PENDING: "待處理",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
 };
 
 function CustomerPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [form, setForm] = useState({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<Order[]>([]);
+  const [historyPayments, setHistoryPayments] = useState<Payment[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const sub = client.models.Customer.observeQuery().subscribe({
@@ -42,6 +41,84 @@ function CustomerPage() {
   function resetForm() {
     setForm({ ...emptyForm });
     setEditingId(null);
+    setShowForm(false);
+  }
+
+  function parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) {
+        alert("檔案無資料列");
+        return;
+      }
+      const header = parseCsvLine(lines[0]).map((h) => h.replace(/^\uFEFF/, "").trim());
+      const nameIdx = header.findIndex((h) => /姓名|name/i.test(h));
+      const phoneIdx = header.findIndex((h) => /^電話$|^phone$/i.test(h));
+      const phone2Idx = header.findIndex((h) => /電話2|phone2/i.test(h));
+      const addressIdx = header.findIndex((h) => /地址|address/i.test(h));
+      const noteIdx = header.findIndex((h) => /備註|note/i.test(h));
+
+      if (nameIdx === -1) {
+        alert("找不到「姓名」欄位，請確認 CSV 標題列包含：姓名, 電話, 地址, 備註");
+        return;
+      }
+
+      let created = 0;
+      let skipped = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvLine(lines[i]);
+        const name = cols[nameIdx]?.trim();
+        if (!name) { skipped++; continue; }
+        await client.models.Customer.create({
+          name,
+          phone: phoneIdx >= 0 ? cols[phoneIdx]?.trim() || null : null,
+          phone2: phone2Idx >= 0 ? cols[phone2Idx]?.trim() || null : null,
+          address: addressIdx >= 0 ? cols[addressIdx]?.trim() || null : null,
+          note: noteIdx >= 0 ? cols[noteIdx]?.trim() || null : null,
+        });
+        created++;
+      }
+      alert(`匯入完成：新增 ${created} 筆，跳過 ${skipped} 筆`);
+    } catch (err) {
+      alert(err instanceof Error ? `匯入失敗：${err.message}` : "匯入失敗");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +138,7 @@ function CustomerPage() {
     const payload = {
       name: form.name.trim(),
       phone: form.phone.trim() || null,
+      phone2: form.phone2.trim() || null,
       address: form.address.trim() || null,
       note: form.note.trim() || null,
     };
@@ -74,9 +152,11 @@ function CustomerPage() {
 
   function handleEdit(c: Customer) {
     setEditingId(c.id);
+    setShowForm(true);
     setForm({
       name: c.name ?? "",
       phone: c.phone ?? "",
+      phone2: c.phone2 ?? "",
       address: c.address ?? "",
       note: c.note ?? "",
     });
@@ -96,11 +176,23 @@ function CustomerPage() {
     const { data } = await client.models.Order.list({
       filter: { customerId: { eq: c.id } },
     });
-    const sorted = [...data].sort((a, b) =>
+    const sorted = [...data].filter((o) => !o.isDeleted).sort((a, b) =>
       (b.orderDate ?? "").localeCompare(a.orderDate ?? "")
     );
     setHistory(sorted);
+    // Fetch payments for these orders
+    const orderIds = sorted.map((o) => o.id);
+    const payResults = await Promise.all(
+      orderIds.map((id) =>
+        client.models.Payment.list({ filter: { orderId: { eq: id } } })
+      )
+    );
+    setHistoryPayments(payResults.flatMap((r) => r.data));
     setLoadingHistory(false);
+  }
+
+  function isOrderPaid(orderId: string) {
+    return historyPayments.some((p) => p.orderId === orderId);
   }
 
   const filtered = customers.filter((c) => {
@@ -116,7 +208,15 @@ function CustomerPage() {
   return (
     <div className="page">
       <section className="panel">
-        <h2>{editingId ? "編輯客戶" : "新增客戶"}</h2>
+        <div className="panel-head" style={{ marginBottom: showForm ? 16 : 0 }}>
+          <h2>{editingId ? "編輯客戶" : "新增客戶"}</h2>
+          {!editingId && (
+            <button className="btn-secondary" onClick={() => setShowForm(!showForm)}>
+              {showForm ? "收起" : "展開"}
+            </button>
+          )}
+        </div>
+        {showForm && (
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
             客戶姓名 *
@@ -134,6 +234,14 @@ function CustomerPage() {
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="電話號碼"
+            />
+          </label>
+          <label>
+            電話號碼2
+            <input
+              value={form.phone2}
+              onChange={(e) => setForm({ ...form, phone2: e.target.value })}
+              placeholder="選填"
             />
           </label>
           <label className="full">
@@ -162,8 +270,31 @@ function CustomerPage() {
                 取消
               </button>
             )}
+            {!editingId && (
+              <>
+                <label className="btn-secondary" style={{ cursor: "pointer", textAlign: "center" }}>
+                  {importing ? "匯入中…" : "匯入 CSV"}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    style={{ display: "none" }}
+                    onChange={handleCsvImport}
+                    disabled={importing}
+                  />
+                </label>
+                <a
+                  className="btn-secondary"
+                  href="data:text/csv;charset=utf-8,%EF%BB%BF姓名,電話,電話2,地址,備註\n"
+                  download="客戶範本.csv"
+                  style={{ textAlign: "center", textDecoration: "none" }}
+                >
+                  下載範本
+                </a>
+              </>
+            )}
           </div>
         </form>
+        )}
       </section>
 
       <section className="panel">
@@ -182,6 +313,7 @@ function CustomerPage() {
               <tr>
                 <th>姓名</th>
                 <th>電話</th>
+                <th>電話2</th>
                 <th>地址</th>
                 <th>備註</th>
                 <th>操作</th>
@@ -190,7 +322,7 @@ function CustomerPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
+                  <td colSpan={6} className="empty">
                     尚無客戶資料
                   </td>
                 </tr>
@@ -199,6 +331,7 @@ function CustomerPage() {
                 <tr key={c.id}>
                   <td>{c.name}</td>
                   <td>{c.phone || "—"}</td>
+                  <td>{c.phone2 || "—"}</td>
                   <td>{c.address || "—"}</td>
                   <td>{c.note || "—"}</td>
                   <td>
@@ -252,16 +385,20 @@ function CustomerPage() {
                       <th>訂單日期</th>
                       <th>狀態</th>
                       <th className="num">總金額</th>
-                      <th>備註</th>
                     </tr>
                   </thead>
                   <tbody>
                     {history.map((o) => (
                       <tr key={o.id}>
                         <td>{o.orderDate || "—"}</td>
-                        <td>{statusLabel[o.status ?? "PENDING"] ?? o.status}</td>
+                        <td>
+                          {isOrderPaid(o.id) ? (
+                            <span className="payment-badge">已收款</span>
+                          ) : (
+                            <span style={{ color: "var(--danger)" }}>未收款</span>
+                          )}
+                        </td>
                         <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
-                        <td>{o.note || "—"}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -15,6 +15,7 @@ function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -32,6 +33,7 @@ function StockPage() {
   function resetForm() {
     setForm({ ...emptyForm });
     setEditingId(null);
+    setShowForm(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -57,6 +59,7 @@ function StockPage() {
 
   function handleEdit(p: Product) {
     setEditingId(p.id);
+    setShowForm(true);
     setForm({
       name: p.name ?? "",
       unitPrice: p.unitPrice != null ? String(p.unitPrice) : "",
@@ -86,7 +89,15 @@ function StockPage() {
   return (
     <div className="page">
       <section className="panel">
-        <h2>{editingId ? "編輯商品" : "新增商品"}</h2>
+        <div className="panel-head" style={{ marginBottom: showForm ? 16 : 0 }}>
+          <h2>{editingId ? "編輯商品" : "新增商品"}</h2>
+          {!editingId && (
+            <button className="btn-secondary" onClick={() => setShowForm(!showForm)}>
+              {showForm ? "收起" : "展開"}
+            </button>
+          )}
+        </div>
+        {showForm && (
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
             商品名稱 *
@@ -140,6 +151,7 @@ function StockPage() {
             )}
           </div>
         </form>
+        )}
       </section>
 
       <section className="panel">

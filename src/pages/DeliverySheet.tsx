@@ -8,20 +8,16 @@ interface Props {
   items: OrderItem[];
 }
 
-/**
- * 送貨單（Delivery Sheet）
- * 列印尺寸：9.5 英吋 x 5.5 英吋
- * 內容：客戶姓名、地址、電話、訂單項目、每項單價與數量、總金額
- */
 function DeliverySheet({ order, items }: Props) {
-  const total =
-    order.totalPrice ??
-    items.reduce((sum, it) => sum + (it.subtotal ?? 0), 0);
+  const subtotal = items.reduce((sum, it) => sum + (it.subtotal ?? 0), 0);
+  const total = order.totalPrice ?? subtotal;
+  const hasTax = total > subtotal && subtotal > 0;
+  const tax = hasTax ? total - subtotal : 0;
 
   return (
     <div className="delivery-sheet">
       <div className="ds-header">
-        <div className="ds-title">送貨單</div>
+        <div className="ds-title">派工單</div>
         <div className="ds-meta">
           <div>訂單日期：{order.orderDate || "—"}</div>
           <div className="ds-orderno">單號：{order.id.slice(0, 8).toUpperCase()}</div>
@@ -29,17 +25,11 @@ function DeliverySheet({ order, items }: Props) {
       </div>
 
       <div className="ds-customer">
-        <div className="ds-row">
-          <span className="ds-label">客戶姓名：</span>
-          <span className="ds-value">{order.customerName || "—"}</span>
-        </div>
-        <div className="ds-row">
-          <span className="ds-label">聯絡電話：</span>
-          <span className="ds-value">{order.customerPhone || "—"}</span>
-        </div>
-        <div className="ds-row">
-          <span className="ds-label">送貨地址：</span>
-          <span className="ds-value">{order.customerAddress || "—"}</span>
+        <div className="ds-row-inline">
+          <span><span className="ds-label">客戶姓名：</span>{order.customerName || "—"}</span>
+          <span><span className="ds-label">聯絡電話：</span>{order.customerPhone || "—"}</span>
+          <span><span className="ds-label">送貨地址：</span>{order.customerAddress || "—"}</span>
+          <span className="ds-right"><span className="ds-label">工程師：</span>{order.operatorName || "—"}</span>
         </div>
       </div>
 
@@ -68,8 +58,16 @@ function DeliverySheet({ order, items }: Props) {
 
       <div className="ds-footer">
         <div className="ds-total">
-          <span>總金額：</span>
-          <span className="ds-total-value">${total.toFixed(2)}</span>
+          {hasTax && (
+            <>
+              <div>小計：${subtotal.toFixed(2)}</div>
+              <div>稅金（5%）：${tax.toFixed(2)}</div>
+            </>
+          )}
+          <div>
+            <span>總金額：</span>
+            <span className="ds-total-value">${Math.ceil(total)}</span>
+          </div>
         </div>
         <div className="ds-sign">
           <span>簽收：______________</span>

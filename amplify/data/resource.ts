@@ -15,7 +15,7 @@ const schema = a.schema({
   Operator: a
     .model({
       name: a.string().required(), // 姓名
-      role: a.enum(["ENGINEER", "ADMIN", "SALES"]), // 角色
+      role: a.enum(["ENGINEER", "ADMIN", "SALES", "CS"]), // 角色
       phone: a.string(), // 電話
       note: a.string(), // 備註
     })
@@ -38,6 +38,7 @@ const schema = a.schema({
     .model({
       name: a.string().required(), // 客戶姓名
       phone: a.string(), // 電話號碼
+      phone2: a.string(), // 第二電話號碼
       address: a.string(), // 地址
       note: a.string(), // 備註
       orders: a.hasMany("Order", "customerId"), // 訂單歷史
@@ -55,10 +56,12 @@ const schema = a.schema({
       customerAddress: a.string(),
       operatorId: a.id(), // 工程師 ID
       operatorName: a.string(), // 工程師姓名（快照）
+      createdBy: a.string(), // 建立者
       orderDate: a.date(), // 訂單日期
       status: a.enum(["PENDING", "COMPLETED", "CANCELLED"]), // 待處理／已完成／已取消
       totalPrice: a.float().required().default(0), // 訂單總金額
       note: a.string(), // 備註
+      isDeleted: a.boolean().default(false), // 軟刪除
       items: a.hasMany("OrderItem", "orderId"), // 訂單項目
     })
     .authorization((allow) => [allow.publicApiKey()]),
@@ -76,6 +79,19 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
+  // 收款紀錄
+  Payment: a
+    .model({
+      orderId: a.id().required(), // 訂單 ID
+      method: a.enum(["CASH", "TRANSFER"]), // 現金 / 匯款
+      amount: a.float().required(), // 收款金額
+      receivedBy: a.string().required(), // 收款人
+      confirmedBy: a.string(), // 確認人（按下按鈕的登入者）
+      receivedAt: a.datetime(), // 收款時間
+      note: a.string(), // 備註
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
   // 下單結果
   PlaceOrderResult: a.customType({
     orderId: a.string(),
@@ -89,6 +105,7 @@ const schema = a.schema({
     .arguments({
       customerId: a.string().required(),
       operatorId: a.string(),
+      createdBy: a.string(),
       orderDate: a.string(),
       note: a.string(),
       // JSON 字串：[{ productId, quantity }]

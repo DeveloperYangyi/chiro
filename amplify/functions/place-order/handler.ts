@@ -27,6 +27,7 @@ type HandlerArgs = {
   arguments: {
     customerId: string;
     operatorId?: string | null;
+    createdBy?: string | null;
     orderDate?: string | null;
     note?: string | null;
     // JSON 字串：[{ productId, quantity }]
@@ -37,7 +38,7 @@ type HandlerArgs = {
 type LineInput = { productId: string; quantity: number };
 
 export const handler = async (event: HandlerArgs) => {
-  const { customerId, operatorId, orderDate, note, items } = event.arguments;
+  const { customerId, operatorId, createdBy, orderDate, note, items } = event.arguments;
 
   let lines: LineInput[];
   try {
@@ -96,6 +97,7 @@ export const handler = async (event: HandlerArgs) => {
     customerAddress: customer.address,
     operatorId: operatorId ?? null,
     operatorName,
+    createdBy: createdBy ?? null,
     orderDate: orderDate ?? new Date().toISOString().slice(0, 10),
     status: "PENDING",
     totalPrice,

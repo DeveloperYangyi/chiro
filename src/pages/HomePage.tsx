@@ -5,6 +5,7 @@ import { client } from "../client";
 type Product = Schema["Product"]["type"];
 type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
+type Payment = Schema["Payment"]["type"];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -35,6 +36,7 @@ function OrderItems({ orderId }: { orderId: string }) {
 function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   useEffect(() => {
     const oSub = client.models.Order.observeQuery().subscribe({
@@ -43,17 +45,27 @@ function HomePage() {
     const pSub = client.models.Product.observeQuery().subscribe({
       next: (data) => setProducts([...data.items]),
     });
+    const paySub = client.models.Payment.observeQuery().subscribe({
+      next: (data) => setPayments([...data.items]),
+    });
     return () => {
       oSub.unsubscribe();
       pSub.unsubscribe();
+      paySub.unsubscribe();
     };
   }, []);
 
+  const activeOrders = orders.filter((o) => !o.isDeleted);
   const today = todayStr();
-  const todayOrders = orders.filter((o) => o.orderDate === today);
+  const todayOrders = activeOrders.filter((o) => o.orderDate === today);
   const todayRevenue = todayOrders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
   const lowStock = products.filter((p) => (p.quantity ?? 0) <= 5);
-  const totalProducts = products.length;
+
+  const paidOrderIds = new Set(payments.map((p) => p.orderId));
+  const unpaidOrders = activeOrders
+    .filter((o) => !paidOrderIds.has(o.id))
+    .sort((a, b) => (a.orderDate ?? "").localeCompare(b.orderDate ?? ""));
+  const unpaidTotal = unpaidOrders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
 
   return (
     <div className="page">
@@ -74,13 +86,6 @@ function HomePage() {
               <span className="summary-label">今日營收</span>
             </div>
           </div>
-          <div className="summary-card">
-            <span className="summary-icon">📦</span>
-            <div className="summary-info">
-              <span className="summary-value">{totalProducts}</span>
-              <span className="summary-label">商品種類</span>
-            </div>
-          </div>
           <div className="summary-card warn">
             <span className="summary-icon">⚠️</span>
             <div className="summary-info">
@@ -88,35 +93,13 @@ function HomePage() {
               <span className="summary-label">低庫存警示</span>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>📦 庫存總覽</h2>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>商品名稱</th>
-                <th className="num">庫存數量</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products
-                .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
-                .map((p) => (
-                  <tr key={p.id} className={(p.quantity ?? 0) <= 5 ? "out-of-stock" : ""}>
-                    <td>{p.name}</td>
-                    <td className="num">{p.quantity ?? 0}</td>
-                  </tr>
-                ))}
-              {products.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="empty">尚無商品</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className={unpaidOrders.length > 0 ? "summary-card warn" : "summary-card"}>
+            <span className="summary-icon">💳</span>
+            <div className="summary-info">
+              <span className="summary-value">{unpaidOrders.length}</span>
+              <span className="summary-label">未收款訂單</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -152,6 +135,64 @@ function HomePage() {
         </section>
       )}
 
+      {unpaidOrders.length > 0 && (
+        <section className="panel">
+          <h2>💳 未收款訂單（{unpaidOrders.length}）— 合計 ${Math.ceil(unpaidTotal)}</h2>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>客戶</th>
+                  <th>電話</th>
+                  <th>工程師</th>
+                  <th className="num">總金額</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unpaidOrders.map((o) => (
+                  <tr key={o.id}>
+                    <td>{o.orderDate || "—"}</td>
+                    <td>{o.customerName || "—"}</td>
+                    <td>{o.customerPhone || "—"}</td>
+                    <td>{o.operatorName || "—"}</td>
+                    <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      <section className="panel">
+        <h2>📦 庫存總覽</h2>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>商品名稱</th>
+                <th className="num">庫存數量</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products
+                .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+                .map((p) => (
+                  <tr key={p.id} className={(p.quantity ?? 0) <= 5 ? "out-of-stock" : ""}>
+                    <td>{p.name}</td>
+                    <td className="num">{p.quantity ?? 0}</td>
+                  </tr>
+                ))}
+              {products.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="empty">尚無商品</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

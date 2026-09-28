@@ -60,7 +60,7 @@ function App() {
             className={tab === "orders" ? "tab active" : "tab"}
             onClick={() => setTab("orders")}
           >
-            訂單與送貨單
+            訂單與派工單
           </button>
           {isAdmin && (
             <button

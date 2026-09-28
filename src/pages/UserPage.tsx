@@ -14,6 +14,7 @@ const roleLabel: Record<string, string> = {
   ENGINEER: "工程師",
   ADMIN: "管理員",
   SALES: "業務",
+  CS: "客服",
 };
 
 const emptyForm = {
@@ -344,6 +345,7 @@ function UserPage() {
               <option value="ENGINEER">工程師</option>
               <option value="ADMIN">管理員</option>
               <option value="SALES">業務</option>
+              <option value="CS">客服</option>
             </select>
           </label>
           <label>
