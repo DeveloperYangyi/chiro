@@ -63,6 +63,7 @@ function OrderPage() {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [transferReceivers, setTransferReceivers] = useState<TransferReceiver[]>([]);
+  const [allOrderItems, setAllOrderItems] = useState<OrderItem[]>([]);
 
   // 新訂單草稿
   const [customerId, setCustomerId] = useState("");
@@ -162,6 +163,9 @@ function OrderPage() {
     const trSub = client.models.TransferReceiver.observeQuery().subscribe({
       next: (data) => setTransferReceivers([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
     });
+    const oiSub = client.models.OrderItem.observeQuery().subscribe({
+      next: (data) => setAllOrderItems([...data.items]),
+    });
     return () => {
       cSub.unsubscribe();
       pSub.unsubscribe();
@@ -169,6 +173,7 @@ function OrderPage() {
       opSub.unsubscribe();
       paySub.unsubscribe();
       trSub.unsubscribe();
+      oiSub.unsubscribe();
     };
   }, []);
 
@@ -292,9 +297,13 @@ function OrderPage() {
   }
 
   const activeOrders = orders.filter((o) => !o.isDeleted);
-  const filteredOrders = activeOrders.filter((o) =>
-    (o.orderDate ?? "").startsWith(filterMonth)
-  );
+  const filteredOrders = activeOrders
+    .filter((o) => (o.orderDate ?? "").startsWith(filterMonth))
+    .sort((a, b) => {
+      const d = (b.orderDate ?? "").localeCompare(a.orderDate ?? "");
+      if (d !== 0) return d;
+      return (b.orderTime ?? "").localeCompare(a.orderTime ?? "");
+    });
 
   // 編輯
   async function openEdit(order: Order) {
@@ -711,6 +720,7 @@ function OrderPage() {
                 <th>時間</th>
                 <th>客戶</th>
                 <th>電話</th>
+                <th>商品項目</th>
                 <th>工程師</th>
                 <th className="num">總金額</th>
                 <th>建立者</th>
@@ -719,7 +729,7 @@ function OrderPage() {
             </thead>
             <tbody>
               {filteredOrders.length === 0 && (
-                <tr><td colSpan={8} className="empty">此月份尚無訂單</td></tr>
+                <tr><td colSpan={9} className="empty">此月份尚無訂單</td></tr>
               )}
               {filteredOrders.map((o) => {
                 const pay = getPayment(o.id);
@@ -729,6 +739,9 @@ function OrderPage() {
                     <td>{o.orderTime || "—"}</td>
                     <td>{o.customerName || "—"}</td>
                     <td>{o.customerPhone || "—"}</td>
+                    <td className="muted" style={{ fontSize: "0.82rem" }}>
+                      {allOrderItems.filter((i) => i.orderId === o.id).map((i) => `${i.productName}×${i.quantity}`).join("、") || "—"}
+                    </td>
                     <td>{o.operatorName || "—"}</td>
                     <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
                     <td>{o.createdBy || "—"}</td>

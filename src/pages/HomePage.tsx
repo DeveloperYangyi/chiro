@@ -200,7 +200,7 @@ function HomePage() {
                 <tr>
                   <th>日期</th>
                   <th>客戶</th>
-                  <th>電話</th>
+                  <th>商品項目</th>
                   <th>工程師</th>
                   <th className="num">總金額</th>
                   <th>操作</th>
@@ -211,7 +211,7 @@ function HomePage() {
                   <tr key={o.id}>
                     <td>{o.orderDate || "—"}</td>
                     <td>{o.customerName || "—"}</td>
-                    <td>{o.customerPhone || "—"}</td>
+                    <td><OrderItems orderId={o.id} /></td>
                     <td>{o.operatorName || "—"}</td>
                     <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
                     <td>

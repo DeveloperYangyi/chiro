@@ -492,9 +492,7 @@ function FinancePage() {
                     <div className="fin-summary-grid" style={{ marginBottom: 20 }}>
                       {opNames.map((name) => {
                         const opOrders = monthOrders.filter((o) => o.operatorName === name);
-                        const revenue = opOrders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
                         const cost = opOrders.reduce((s, o) => s + (o.cost ?? 0), 0);
-                        const profit = revenue - cost;
                         return (
                           <div key={name} className="fin-card">
                             <div className="fin-card-title">{name}</div>
