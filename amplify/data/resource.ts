@@ -54,6 +54,7 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
+
   // 訂單
   Order: a
     .model({
@@ -70,6 +71,7 @@ const schema = a.schema({
       orderTime: a.string(), // 訂單時間 HH:mm
       status: a.enum(["PENDING", "COMPLETED", "CANCELLED"]), // 待處理／已完成／已取消
       totalPrice: a.float().required().default(0), // 訂單總金額
+      cost: a.float().default(0), // 訂單成本
       note: a.string(), // 備註
       isDeleted: a.boolean().default(false), // 軟刪除
       items: a.hasMany("OrderItem", "orderId"), // 訂單項目

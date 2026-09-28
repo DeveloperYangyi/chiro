@@ -76,18 +76,23 @@ export const handler = async (event: HandlerArgs) => {
       if (!product) throw new Error(`找不到商品：${l.productId}`);
       const qty = Math.max(1, Math.floor(l.quantity));
       const isInfinite = (product.quantity ?? 0) === -1;
-      if (!isInfinite && (product.quantity ?? 0) < qty) {
-        throw new Error(
-          `商品「${product.name}」庫存不足（庫存 ${product.quantity ?? 0}，需求 ${qty}）`
-        );
-      }
+
       // Parse bundle components
       let bundleComponents: { productId: string; quantity: number }[] = [];
       if (product.bundleItems) {
         try { bundleComponents = JSON.parse(product.bundleItems); } catch { /* ignore */ }
       }
 
-      // Validate bundle component stock
+      const isBundle = bundleComponents.length > 0;
+
+      // For regular items: validate item stock
+      if (!isBundle && !isInfinite && (product.quantity ?? 0) < qty) {
+        throw new Error(
+          `商品「${product.name}」庫存不足（庫存 ${product.quantity ?? 0}，需求 ${qty}）`
+        );
+      }
+
+      // For bundles: validate component stock
       for (const comp of bundleComponents) {
         const { data: compProduct } = await client.models.Product.get({ id: comp.productId });
         if (!compProduct) throw new Error(`組合元件找不到：${comp.productId}`);
@@ -149,7 +154,11 @@ export const handler = async (event: HandlerArgs) => {
       if (itemErrors) throw new Error(itemErrors.map((e) => e.message).join("; "));
       if (item) createdItemIds.push(item.id);
 
-      if (!r.infinite) {
+      // For bundles: only deduct component stock, not the bundle itself
+      // For regular items: deduct the item stock
+      const isBundle = r.bundleComponents.length > 0;
+
+      if (!isBundle && !r.infinite) {
         const original = r.product.quantity ?? 0;
         const { errors: updateErrors } = await client.models.Product.update({
           id: r.product.id,
@@ -160,7 +169,7 @@ export const handler = async (event: HandlerArgs) => {
       }
 
       // Deduct bundle component stock
-      if (r.bundleComponents.length > 0) {
+      if (isBundle) {
         for (const comp of r.bundleComponents) {
           const { data: compProduct } = await client.models.Product.get({ id: comp.productId });
           if (!compProduct) continue;

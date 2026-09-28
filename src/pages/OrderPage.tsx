@@ -81,6 +81,7 @@ function OrderPage() {
   // 編輯
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editItems, setEditItems] = useState<OrderItem[]>([]);
+  const [editOriginalItems, setEditOriginalItems] = useState<OrderItem[]>([]);
   const [editNewItems, setEditNewItems] = useState<DraftLine[]>([]);
   const [editRemovedIds, setEditRemovedIds] = useState<string[]>([]);
   const [editSelectedProductId, setEditSelectedProductId] = useState("");
@@ -302,6 +303,7 @@ function OrderPage() {
     });
     setEditingOrder(order);
     setEditItems(items);
+    setEditOriginalItems(items.map((i) => ({ ...i })));
     setEditNewItems([]);
     setEditRemovedIds([]);
     setEditSelectedProductId("");
@@ -328,7 +330,76 @@ function OrderPage() {
         orderDate: editOrderDate,
         orderTime: editOrderTime,
       });
-      // Update existing items (not removed)
+
+      // --- Stock adjustments ---
+      // Helper: get product and its bundle components
+      async function getProductInfo(productId: string) {
+        const { data: p } = await client.models.Product.get({ id: productId });
+        if (!p) return null;
+        let comps: { productId: string; quantity: number }[] = [];
+        if (p.bundleItems) {
+          try { comps = JSON.parse(p.bundleItems); } catch { /* ignore */ }
+        }
+        return { product: p, isBundle: comps.length > 0, components: comps, isInfinite: (p.quantity ?? 0) === -1 };
+      }
+
+      // Helper: adjust stock for a product (positive = restore, negative = deduct)
+      async function adjustStock(productId: string, delta: number) {
+        if (delta === 0) return;
+        const { data: p } = await client.models.Product.get({ id: productId });
+        if (!p || (p.quantity ?? 0) === -1) return;
+        await client.models.Product.update({
+          id: productId,
+          quantity: Math.max(0, (p.quantity ?? 0) + delta),
+        });
+      }
+
+      // Restore stock for removed items
+      for (const id of editRemovedIds) {
+        const orig = editOriginalItems.find((i) => i.id === id);
+        if (!orig || !orig.productId) continue;
+        const info = await getProductInfo(orig.productId);
+        if (!info) continue;
+        if (info.isBundle) {
+          for (const comp of info.components) {
+            await adjustStock(comp.productId, comp.quantity * (orig.quantity ?? 0));
+          }
+        } else {
+          await adjustStock(orig.productId, orig.quantity ?? 0);
+        }
+      }
+
+      // Adjust stock for quantity changes on existing items
+      for (const it of editItems.filter((i) => !editRemovedIds.includes(i.id))) {
+        const orig = editOriginalItems.find((o) => o.id === it.id);
+        if (!orig || !it.productId) continue;
+        const qtyDiff = (orig.quantity ?? 0) - (it.quantity ?? 0); // positive = restore, negative = deduct
+        if (qtyDiff === 0) continue;
+        const info = await getProductInfo(it.productId);
+        if (!info) continue;
+        if (info.isBundle) {
+          for (const comp of info.components) {
+            await adjustStock(comp.productId, comp.quantity * qtyDiff);
+          }
+        } else {
+          await adjustStock(it.productId, qtyDiff);
+        }
+      }
+
+      // Deduct stock for new items
+      for (const nl of editNewItems) {
+        const info = await getProductInfo(nl.productId);
+        if (!info) continue;
+        if (info.isBundle) {
+          for (const comp of info.components) {
+            await adjustStock(comp.productId, -(comp.quantity * nl.quantity));
+          }
+        } else {
+          await adjustStock(nl.productId, -nl.quantity);
+        }
+      }
+
+      // --- Update/Delete/Create order items ---
       for (const it of editItems.filter((i) => !editRemovedIds.includes(i.id))) {
         await client.models.OrderItem.update({
           id: it.id,
@@ -338,11 +409,9 @@ function OrderPage() {
           subtotal: it.subtotal,
         });
       }
-      // Delete removed items
       for (const id of editRemovedIds) {
         await client.models.OrderItem.delete({ id });
       }
-      // Create new items
       for (const nl of editNewItems) {
         await client.models.OrderItem.create({
           orderId: editingOrder.id,
@@ -353,6 +422,7 @@ function OrderPage() {
           subtotal: nl.subtotalOverride ?? nl.unitPrice * nl.quantity,
         });
       }
+
       // recalc total
       const existingSubtotal = editItems
         .filter((i) => !editRemovedIds.includes(i.id))

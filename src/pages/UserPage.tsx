@@ -419,15 +419,6 @@ function UserPage() {
             value={newReceiverName}
             onChange={(e) => setNewReceiverName(e.target.value)}
             placeholder="輸入收款人名稱"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (newReceiverName.trim()) {
-                  client.models.TransferReceiver.create({ name: newReceiverName.trim() });
-                  setNewReceiverName("");
-                }
-              }
-            }}
           />
           <button
             className="btn-primary"

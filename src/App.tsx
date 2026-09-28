@@ -6,9 +6,11 @@ import StockPage from "./pages/StockPage";
 import CustomerPage from "./pages/CustomerPage";
 import OrderPage from "./pages/OrderPage";
 import UserPage from "./pages/UserPage";
+import CalendarPage from "./pages/CalendarPage";
+import FinancePage from "./pages/FinancePage";
 import logo from "./assets/chirologo.png";
 
-type Tab = "home" | "stock" | "customers" | "orders" | "users";
+type Tab = "home" | "stock" | "customers" | "orders" | "calendar" | "finance" | "users";
 
 function App() {
   const { signOut, user } = useAuthenticator();
@@ -62,6 +64,20 @@ function App() {
           >
             訂單與派工單
           </button>
+          <button
+            className={tab === "calendar" ? "tab active" : "tab"}
+            onClick={() => setTab("calendar")}
+          >
+            行事曆
+          </button>
+          {isAdmin && (
+            <button
+              className={tab === "finance" ? "tab active" : "tab"}
+              onClick={() => setTab("finance")}
+            >
+              財務報表
+            </button>
+          )}
           {isAdmin && (
             <button
               className={tab === "users" ? "tab active" : "tab"}
@@ -85,6 +101,8 @@ function App() {
         {tab === "stock" && <StockPage />}
         {tab === "customers" && <CustomerPage />}
         {tab === "orders" && <OrderPage />}
+        {tab === "calendar" && <CalendarPage />}
+        {tab === "finance" && isAdmin && <FinancePage />}
         {tab === "users" && isAdmin && <UserPage />}
       </main>
     </div>
