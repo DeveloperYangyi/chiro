@@ -4,22 +4,15 @@ import { client } from "../client";
 import { generateClient } from "aws-amplify/data";
 
 type Operator = Schema["Operator"]["type"];
+type TransferReceiver = Schema["TransferReceiver"]["type"];
 
 // Separate client for userPool-authenticated mutations
 const authClient = generateClient<Schema>({
   authMode: "userPool",
 });
 
-const roleLabel: Record<string, string> = {
-  ENGINEER: "工程師",
-  ADMIN: "管理員",
-  SALES: "業務",
-  CS: "客服",
-};
-
 const emptyForm = {
   name: "",
-  role: "ENGINEER" as Operator["role"],
   phone: "",
   note: "",
 };
@@ -49,6 +42,9 @@ function UserPage() {
   const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  const [receivers, setReceivers] = useState<TransferReceiver[]>([]);
+  const [newReceiverName, setNewReceiverName] = useState("");
+
   useEffect(() => {
     const sub = client.models.Operator.observeQuery().subscribe({
       next: (data) => {
@@ -58,7 +54,10 @@ function UserPage() {
         setOperators(sorted);
       },
     });
-    return () => sub.unsubscribe();
+    const rSub = client.models.TransferReceiver.observeQuery().subscribe({
+      next: (data) => setReceivers([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
+    return () => { sub.unsubscribe(); rSub.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -155,7 +154,7 @@ function UserPage() {
     }
     const payload = {
       name: form.name.trim(),
-      role: form.role,
+      role: "ENGINEER" as const,
       phone: form.phone.trim() || null,
       note: form.note.trim() || null,
     };
@@ -171,14 +170,13 @@ function UserPage() {
     setEditingId(o.id);
     setForm({
       name: o.name ?? "",
-      role: o.role ?? "ENGINEER",
       phone: o.phone ?? "",
       note: o.note ?? "",
     });
   }
 
   async function handleDelete(id: string) {
-    if (confirm("確定要刪除此人員嗎？")) {
+    if (confirm("確定要刪除此工程師嗎？")) {
       await client.models.Operator.delete({ id });
       if (editingId === id) resetForm();
     }
@@ -189,8 +187,7 @@ function UserPage() {
     if (!q) return true;
     return (
       (o.name ?? "").toLowerCase().includes(q) ||
-      (o.phone ?? "").toLowerCase().includes(q) ||
-      (roleLabel[o.role ?? ""] ?? "").includes(q)
+      (o.phone ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -320,9 +317,9 @@ function UserPage() {
         </div>
       </section>
 
-      {/* 工程師／人員管理 */}
+      {/* 工程師管理 */}
       <section className="panel">
-        <h2>{editingId ? "編輯人員" : "新增人員"}</h2>
+        <h2>{editingId ? "編輯工程師" : "新增工程師"}</h2>
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
             姓名 *
@@ -334,21 +331,6 @@ function UserPage() {
             />
           </label>
           <label>
-            角色 *
-            <select
-              required
-              value={form.role ?? "ENGINEER"}
-              onChange={(e) =>
-                setForm({ ...form, role: e.target.value as Operator["role"] })
-              }
-            >
-              <option value="ENGINEER">工程師</option>
-              <option value="ADMIN">管理員</option>
-              <option value="SALES">業務</option>
-              <option value="CS">客服</option>
-            </select>
-          </label>
-          <label>
             電話
             <input
               value={form.phone}
@@ -356,7 +338,7 @@ function UserPage() {
               placeholder="電話號碼"
             />
           </label>
-          <label>
+          <label className="full">
             備註
             <input
               value={form.note}
@@ -366,7 +348,7 @@ function UserPage() {
           </label>
           <div className="form-actions full">
             <button type="submit" className="btn-primary">
-              {editingId ? "更新人員" : "新增人員"}
+              {editingId ? "更新工程師" : "新增工程師"}
             </button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={resetForm}>
@@ -379,12 +361,12 @@ function UserPage() {
 
       <section className="panel">
         <div className="panel-head">
-          <h2>人員清單（{filtered.length}）</h2>
+          <h2>工程師清單（{filtered.length}）</h2>
           <input
             className="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋姓名、角色或電話"
+            placeholder="搜尋姓名或電話"
           />
         </div>
         <div className="table-wrap">
@@ -392,7 +374,6 @@ function UserPage() {
             <thead>
               <tr>
                 <th>姓名</th>
-                <th>角色</th>
                 <th>電話</th>
                 <th>備註</th>
                 <th>操作</th>
@@ -401,15 +382,14 @@ function UserPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
-                    尚無人員資料
+                  <td colSpan={4} className="empty">
+                    尚無工程師資料
                   </td>
                 </tr>
               )}
               {filtered.map((o) => (
                 <tr key={o.id}>
                   <td>{o.name}</td>
-                  <td>{roleLabel[o.role ?? ""] ?? o.role}</td>
                   <td>{o.phone || "—"}</td>
                   <td>{o.note || "—"}</td>
                   <td>
@@ -424,6 +404,61 @@ function UserPage() {
                         刪除
                       </button>
                     </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>匯款收款人</h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={newReceiverName}
+            onChange={(e) => setNewReceiverName(e.target.value)}
+            placeholder="輸入收款人名稱"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (newReceiverName.trim()) {
+                  client.models.TransferReceiver.create({ name: newReceiverName.trim() });
+                  setNewReceiverName("");
+                }
+              }
+            }}
+          />
+          <button
+            className="btn-primary"
+            onClick={() => {
+              if (!newReceiverName.trim()) { alert("請輸入名稱"); return; }
+              client.models.TransferReceiver.create({ name: newReceiverName.trim() });
+              setNewReceiverName("");
+            }}
+          >
+            新增
+          </button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receivers.length === 0 && (
+                <tr><td colSpan={2} className="empty">尚無匯款收款人</td></tr>
+              )}
+              {receivers.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td>
+                    <button className="btn-link danger" onClick={() => {
+                      if (confirm(`確定要刪除「${r.name}」嗎？`)) client.models.TransferReceiver.delete({ id: r.id });
+                    }}>刪除</button>
                   </td>
                 </tr>
               ))}

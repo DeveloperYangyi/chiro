@@ -4,6 +4,7 @@ import { client } from "../client";
 
 type Customer = Schema["Customer"]["type"];
 type Order = Schema["Order"]["type"];
+type OrderItem = Schema["OrderItem"]["type"];
 type Payment = Schema["Payment"]["type"];
 
 const emptyForm = {
@@ -23,7 +24,10 @@ function CustomerPage() {
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<Order[]>([]);
   const [historyPayments, setHistoryPayments] = useState<Payment[]>([]);
+  const [historyItemsMap, setHistoryItemsMap] = useState<Record<string, OrderItem[]>>({});
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
@@ -35,7 +39,13 @@ function CustomerPage() {
         setCustomers(sorted);
       },
     });
-    return () => sub.unsubscribe();
+    const oSub = client.models.Order.observeQuery().subscribe({
+      next: (data) => setOrders([...data.items].filter((o) => !o.isDeleted)),
+    });
+    const oiSub = client.models.OrderItem.observeQuery().subscribe({
+      next: (data) => setOrderItems([...data.items]),
+    });
+    return () => { sub.unsubscribe(); oSub.unsubscribe(); oiSub.unsubscribe(); };
   }, []);
 
   function resetForm() {
@@ -163,8 +173,8 @@ function CustomerPage() {
   }
 
   async function handleDelete(id: string) {
-    if (confirm("確定要刪除此客戶嗎？")) {
-      await client.models.Customer.delete({ id });
+    if (confirm("確定要停用此客戶嗎？")) {
+      await client.models.Customer.update({ id, isActive: false });
       if (editingId === id) resetForm();
       if (historyCustomer?.id === id) setHistoryCustomer(null);
     }
@@ -188,6 +198,14 @@ function CustomerPage() {
       )
     );
     setHistoryPayments(payResults.flatMap((r) => r.data));
+    const itemResults = await Promise.all(
+      sorted.map((o) =>
+        client.models.OrderItem.list({ filter: { orderId: { eq: o.id } } })
+      )
+    );
+    const itemsMap: Record<string, OrderItem[]> = {};
+    sorted.forEach((o, i) => { itemsMap[o.id] = itemResults[i].data; });
+    setHistoryItemsMap(itemsMap);
     setLoadingHistory(false);
   }
 
@@ -195,7 +213,18 @@ function CustomerPage() {
     return historyPayments.some((p) => p.orderId === orderId);
   }
 
+  function getLastOrder(customerId: string) {
+    const custOrders = orders
+      .filter((o) => o.customerId === customerId)
+      .sort((a, b) => `${b.orderDate ?? ""}${b.orderTime ?? ""}`.localeCompare(`${a.orderDate ?? ""}${a.orderTime ?? ""}`));
+    if (custOrders.length === 0) return null;
+    const last = custOrders[0];
+    const items = orderItems.filter((i) => i.orderId === last.id);
+    return { order: last, items };
+  }
+
   const filtered = customers.filter((c) => {
+    if (c.isActive === false) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -315,6 +344,7 @@ function CustomerPage() {
                 <th>電話</th>
                 <th>電話2</th>
                 <th>地址</th>
+                <th>最近訂單</th>
                 <th>備註</th>
                 <th>操作</th>
               </tr>
@@ -322,17 +352,29 @@ function CustomerPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty">
+                  <td colSpan={7} className="empty">
                     尚無客戶資料
                   </td>
                 </tr>
               )}
-              {filtered.map((c) => (
+              {filtered.map((c) => {
+                const last = getLastOrder(c.id);
+                return (
                 <tr key={c.id}>
                   <td>{c.name}</td>
                   <td>{c.phone || "—"}</td>
                   <td>{c.phone2 || "—"}</td>
                   <td>{c.address || "—"}</td>
+                  <td>
+                    {last ? (
+                      <>
+                        <div>{last.order.orderDate} {last.order.orderTime || ""}</div>
+                        <div className="muted" style={{ fontSize: "0.78rem" }}>
+                          {last.items.map((i) => `${i.productName}×${i.quantity}`).join("、")}
+                        </div>
+                      </>
+                    ) : "—"}
+                  </td>
                   <td>{c.note || "—"}</td>
                   <td>
                     <div className="row-actions">
@@ -346,12 +388,13 @@ function CustomerPage() {
                         className="btn-link danger"
                         onClick={() => handleDelete(c.id)}
                       >
-                        刪除
+                        停用
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -359,7 +402,7 @@ function CustomerPage() {
 
       {historyCustomer && (
         <div className="modal-overlay" onClick={() => setHistoryCustomer(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
             <div className="modal-head">
               <h2>{historyCustomer.name} 的訂單歷史</h2>
               <button
@@ -370,10 +413,6 @@ function CustomerPage() {
               </button>
             </div>
             <div className="modal-body">
-              <p className="muted">
-                電話：{historyCustomer.phone || "—"} ・ 地址：
-                {historyCustomer.address || "—"}
-              </p>
               {loadingHistory ? (
                 <p className="muted">載入中…</p>
               ) : history.length === 0 ? (
@@ -383,6 +422,8 @@ function CustomerPage() {
                   <thead>
                     <tr>
                       <th>訂單日期</th>
+                      <th>商品明細</th>
+                      <th>工程師</th>
                       <th>狀態</th>
                       <th className="num">總金額</th>
                     </tr>
@@ -390,7 +431,11 @@ function CustomerPage() {
                   <tbody>
                     {history.map((o) => (
                       <tr key={o.id}>
-                        <td>{o.orderDate || "—"}</td>
+                        <td>{o.orderDate || "—"} {o.orderTime || ""}</td>
+                        <td>
+                          {(historyItemsMap[o.id] ?? []).map((i) => `${i.productName}×${i.quantity}`).join("、") || "—"}
+                        </td>
+                        <td>{o.operatorName || "—"}</td>
                         <td>
                           {isOrderPaid(o.id) ? (
                             <span className="payment-badge">已收款</span>
@@ -398,7 +443,7 @@ function CustomerPage() {
                             <span style={{ color: "var(--danger)" }}>未收款</span>
                           )}
                         </td>
-                        <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
+                        <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
                       </tr>
                     ))}
                   </tbody>

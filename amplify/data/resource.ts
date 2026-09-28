@@ -30,6 +30,7 @@ const schema = a.schema({
       quantity: a.integer().required().default(0), // 庫存數量
       unit: a.string(), // 單位（例如：件、箱）
       note: a.string(), // 備註
+      bundleItems: a.string(), // JSON: [{productId, quantity}] 組合元件
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
@@ -41,7 +42,15 @@ const schema = a.schema({
       phone2: a.string(), // 第二電話號碼
       address: a.string(), // 地址
       note: a.string(), // 備註
+      isActive: a.boolean().default(true), // 是否啟用
       orders: a.hasMany("Order", "customerId"), // 訂單歷史
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
+  // 匯款收款人
+  TransferReceiver: a
+    .model({
+      name: a.string().required(),
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
@@ -58,6 +67,7 @@ const schema = a.schema({
       operatorName: a.string(), // 工程師姓名（快照）
       createdBy: a.string(), // 建立者
       orderDate: a.date(), // 訂單日期
+      orderTime: a.string(), // 訂單時間 HH:mm
       status: a.enum(["PENDING", "COMPLETED", "CANCELLED"]), // 待處理／已完成／已取消
       totalPrice: a.float().required().default(0), // 訂單總金額
       note: a.string(), // 備註
@@ -107,6 +117,8 @@ const schema = a.schema({
       operatorId: a.string(),
       createdBy: a.string(),
       orderDate: a.string(),
+      orderTime: a.string(),
+      totalOverride: a.float(),
       note: a.string(),
       // JSON 字串：[{ productId, quantity }]
       items: a.string().required(),

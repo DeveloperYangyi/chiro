@@ -29,6 +29,8 @@ type HandlerArgs = {
     operatorId?: string | null;
     createdBy?: string | null;
     orderDate?: string | null;
+    orderTime?: string | null;
+    totalOverride?: number | null;
     note?: string | null;
     // JSON 字串：[{ productId, quantity }]
     items: string;
@@ -38,7 +40,7 @@ type HandlerArgs = {
 type LineInput = { productId: string; quantity: number };
 
 export const handler = async (event: HandlerArgs) => {
-  const { customerId, operatorId, createdBy, orderDate, note, items } = event.arguments;
+  const { customerId, operatorId, createdBy, orderDate, orderTime, totalOverride, note, items } = event.arguments;
 
   let lines: LineInput[];
   try {
@@ -73,21 +75,43 @@ export const handler = async (event: HandlerArgs) => {
       });
       if (!product) throw new Error(`找不到商品：${l.productId}`);
       const qty = Math.max(1, Math.floor(l.quantity));
-      if ((product.quantity ?? 0) < qty) {
+      const isInfinite = (product.quantity ?? 0) === -1;
+      if (!isInfinite && (product.quantity ?? 0) < qty) {
         throw new Error(
           `商品「${product.name}」庫存不足（庫存 ${product.quantity ?? 0}，需求 ${qty}）`
         );
       }
+      // Parse bundle components
+      let bundleComponents: { productId: string; quantity: number }[] = [];
+      if (product.bundleItems) {
+        try { bundleComponents = JSON.parse(product.bundleItems); } catch { /* ignore */ }
+      }
+
+      // Validate bundle component stock
+      for (const comp of bundleComponents) {
+        const { data: compProduct } = await client.models.Product.get({ id: comp.productId });
+        if (!compProduct) throw new Error(`組合元件找不到：${comp.productId}`);
+        const compIsInfinite = (compProduct.quantity ?? 0) === -1;
+        const compNeed = comp.quantity * qty;
+        if (!compIsInfinite && (compProduct.quantity ?? 0) < compNeed) {
+          throw new Error(
+            `組合「${product.name}」中的「${compProduct.name}」庫存不足（庫存 ${compProduct.quantity ?? 0}，需求 ${compNeed}）`
+          );
+        }
+      }
+
       return {
         product,
         qty,
+        infinite: isInfinite,
+        bundleComponents,
         unitPrice: product.unitPrice ?? 0,
         subtotal: (product.unitPrice ?? 0) * qty,
       };
     })
   );
 
-  const totalPrice = resolved.reduce((sum, r) => sum + r.subtotal, 0);
+  const totalPrice = totalOverride ?? resolved.reduce((sum, r) => sum + r.subtotal, 0);
 
   // 3. 建立訂單
   const { data: order, errors: orderErrors } = await client.models.Order.create({
@@ -99,6 +123,7 @@ export const handler = async (event: HandlerArgs) => {
     operatorName,
     createdBy: createdBy ?? null,
     orderDate: orderDate ?? new Date().toISOString().slice(0, 10),
+    orderTime: orderTime ?? null,
     status: "PENDING",
     totalPrice,
     note: note ?? null,
@@ -124,13 +149,34 @@ export const handler = async (event: HandlerArgs) => {
       if (itemErrors) throw new Error(itemErrors.map((e) => e.message).join("; "));
       if (item) createdItemIds.push(item.id);
 
-      const original = r.product.quantity ?? 0;
-      const { errors: updateErrors } = await client.models.Product.update({
-        id: r.product.id,
-        quantity: Math.max(0, original - r.qty),
-      });
-      if (updateErrors) throw new Error(updateErrors.map((e) => e.message).join("; "));
-      deducted.push({ id: r.product.id, original });
+      if (!r.infinite) {
+        const original = r.product.quantity ?? 0;
+        const { errors: updateErrors } = await client.models.Product.update({
+          id: r.product.id,
+          quantity: Math.max(0, original - r.qty),
+        });
+        if (updateErrors) throw new Error(updateErrors.map((e) => e.message).join("; "));
+        deducted.push({ id: r.product.id, original });
+      }
+
+      // Deduct bundle component stock
+      if (r.bundleComponents.length > 0) {
+        for (const comp of r.bundleComponents) {
+          const { data: compProduct } = await client.models.Product.get({ id: comp.productId });
+          if (!compProduct) continue;
+          const compIsInfinite = (compProduct.quantity ?? 0) === -1;
+          if (!compIsInfinite) {
+            const compOriginal = compProduct.quantity ?? 0;
+            const compDeduct = comp.quantity * r.qty;
+            const { errors: compErrors } = await client.models.Product.update({
+              id: comp.productId,
+              quantity: Math.max(0, compOriginal - compDeduct),
+            });
+            if (compErrors) throw new Error(compErrors.map((e) => e.message).join("; "));
+            deducted.push({ id: comp.productId, original: compOriginal });
+          }
+        }
+      }
     }
   } catch (err) {
     // 回滾：回補庫存、刪除已建立的項目與訂單

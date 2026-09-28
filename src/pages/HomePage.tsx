@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import type { Schema } from "../../amplify/data/resource";
 import { client } from "../client";
+import { useAuthenticator } from "@aws-amplify/ui-react";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 type Product = Schema["Product"]["type"];
 type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
 type Payment = Schema["Payment"]["type"];
+type Operator = Schema["Operator"]["type"];
+type TransferReceiver = Schema["TransferReceiver"]["type"];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -34,9 +38,28 @@ function OrderItems({ orderId }: { orderId: string }) {
 }
 
 function HomePage() {
+  const { user } = useAuthenticator();
+  const [displayName, setDisplayName] = useState("");
+
+  useEffect(() => {
+    fetchAuthSession().then((session) => {
+      const name = (session.tokens?.idToken?.payload?.["preferred_username"] as string) ?? "";
+      setDisplayName(name);
+    });
+  }, [user]);
+
+  const currentUserName = displayName || (user?.signInDetails?.loginId ?? "");
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [transferReceivers, setTransferReceivers] = useState<TransferReceiver[]>([]);
+
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
+  const [paymentBy, setPaymentBy] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
 
   useEffect(() => {
     const oSub = client.models.Order.observeQuery().subscribe({
@@ -48,10 +71,18 @@ function HomePage() {
     const paySub = client.models.Payment.observeQuery().subscribe({
       next: (data) => setPayments([...data.items]),
     });
+    const opSub = client.models.Operator.observeQuery().subscribe({
+      next: (data) => setOperators([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
+    const trSub = client.models.TransferReceiver.observeQuery().subscribe({
+      next: (data) => setTransferReceivers([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
     return () => {
       oSub.unsubscribe();
       pSub.unsubscribe();
       paySub.unsubscribe();
+      opSub.unsubscribe();
+      trSub.unsubscribe();
     };
   }, []);
 
@@ -59,13 +90,34 @@ function HomePage() {
   const today = todayStr();
   const todayOrders = activeOrders.filter((o) => o.orderDate === today);
   const todayRevenue = todayOrders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
-  const lowStock = products.filter((p) => (p.quantity ?? 0) <= 5);
+  const lowStock = products.filter((p) => (p.quantity ?? 0) !== -1 && (p.quantity ?? 0) <= 5);
 
   const paidOrderIds = new Set(payments.map((p) => p.orderId));
   const unpaidOrders = activeOrders
     .filter((o) => !paidOrderIds.has(o.id))
     .sort((a, b) => (a.orderDate ?? "").localeCompare(b.orderDate ?? ""));
   const unpaidTotal = unpaidOrders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
+
+  async function savePayment() {
+    if (!paymentOrder) return;
+    if (!paymentBy.trim()) { alert("請選擇收款人"); return; }
+    setSavingPayment(true);
+    try {
+      await client.models.Payment.create({
+        orderId: paymentOrder.id,
+        method: paymentMethod,
+        amount: paymentOrder.totalPrice ?? 0,
+        receivedBy: paymentBy.trim(),
+        confirmedBy: currentUserName,
+        receivedAt: new Date().toISOString(),
+      });
+      setPaymentOrder(null);
+    } catch (err) {
+      alert(err instanceof Error ? `收款失敗：${err.message}` : "收款失敗");
+    } finally {
+      setSavingPayment(false);
+    }
+  }
 
   return (
     <div className="page">
@@ -82,8 +134,8 @@ function HomePage() {
           <div className="summary-card">
             <span className="summary-icon">💰</span>
             <div className="summary-info">
-              <span className="summary-value">${todayRevenue.toFixed(2)}</span>
-              <span className="summary-label">今日營收</span>
+              <span className="summary-value">${Math.ceil(todayRevenue)}</span>
+              <span className="summary-label">今日營收（含未收款）</span>
             </div>
           </div>
           <div className="summary-card warn">
@@ -110,9 +162,11 @@ function HomePage() {
             <table>
               <thead>
                 <tr>
+                  <th>時間</th>
                   <th>客戶</th>
                   <th>電話</th>
                   <th>地址</th>
+                  <th>工程師</th>
                   <th>商品明細</th>
                   <th className="num">總金額</th>
                 </tr>
@@ -120,13 +174,15 @@ function HomePage() {
               <tbody>
                 {todayOrders.map((o) => (
                   <tr key={o.id}>
+                    <td>{o.orderTime || "—"}</td>
                     <td>{o.customerName || "—"}</td>
                     <td>{o.customerPhone || "—"}</td>
                     <td>{o.customerAddress || "—"}</td>
+                    <td>{o.operatorName || "—"}</td>
                     <td>
                       <OrderItems orderId={o.id} />
                     </td>
-                    <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
+                    <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -147,6 +203,7 @@ function HomePage() {
                   <th>電話</th>
                   <th>工程師</th>
                   <th className="num">總金額</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,7 +213,10 @@ function HomePage() {
                     <td>{o.customerName || "—"}</td>
                     <td>{o.customerPhone || "—"}</td>
                     <td>{o.operatorName || "—"}</td>
-                    <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
+                    <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
+                    <td>
+                      <button className="btn-link" onClick={() => { setPaymentOrder(o); setPaymentMethod("CASH"); setPaymentBy(""); }}>收款</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -179,9 +239,9 @@ function HomePage() {
               {products
                 .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
                 .map((p) => (
-                  <tr key={p.id} className={(p.quantity ?? 0) <= 5 ? "out-of-stock" : ""}>
+                  <tr key={p.id} className={(p.quantity ?? 0) !== -1 && (p.quantity ?? 0) <= 5 ? "out-of-stock" : ""}>
                     <td>{p.name}</td>
-                    <td className="num">{p.quantity ?? 0}</td>
+                    <td className="num">{(p.quantity ?? 0) === -1 ? "∞" : (p.quantity ?? 0)}</td>
                   </tr>
                 ))}
               {products.length === 0 && (
@@ -193,6 +253,49 @@ function HomePage() {
           </table>
         </div>
       </section>
+
+      {paymentOrder && (
+        <div className="modal-overlay" onClick={() => setPaymentOrder(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>收款 — {paymentOrder.customerName}</h2>
+              <button className="btn-close" onClick={() => setPaymentOrder(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="muted">訂單金額：${Math.ceil(paymentOrder.totalPrice ?? 0)}</p>
+              <div className="form-grid">
+                <label>
+                  收款方式 *
+                  <select value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value as "CASH" | "TRANSFER"); setPaymentBy(""); }}>
+                    <option value="CASH">現金</option>
+                    <option value="TRANSFER">匯款</option>
+                  </select>
+                </label>
+                <label>
+                  收款人 *
+                  <select value={paymentBy} onChange={(e) => setPaymentBy(e.target.value)}>
+                    <option value="">請選擇收款人</option>
+                    {paymentMethod === "CASH"
+                      ? operators.map((op) => (
+                          <option key={op.id} value={op.name}>{op.name}</option>
+                        ))
+                      : transferReceivers.map((r) => (
+                          <option key={r.id} value={r.name}>{r.name}</option>
+                        ))
+                    }
+                  </select>
+                </label>
+              </div>
+              <div className="form-actions" style={{ marginTop: 16 }}>
+                <button className="btn-primary" onClick={savePayment} disabled={savingPayment}>
+                  {savingPayment ? "儲存中…" : "確認收款"}
+                </button>
+                <button className="btn-secondary" onClick={() => setPaymentOrder(null)}>取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

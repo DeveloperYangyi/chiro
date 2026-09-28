@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Schema } from "../../amplify/data/resource";
 import { client } from "../client";
 import { useAuthenticator } from "@aws-amplify/ui-react";
@@ -11,6 +11,7 @@ type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
 type Operator = Schema["Operator"]["type"];
 type Payment = Schema["Payment"]["type"];
+type TransferReceiver = Schema["TransferReceiver"]["type"];
 
 interface DraftLine {
   productId: string;
@@ -22,8 +23,26 @@ interface DraftLine {
   subtotalRaw: string;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function now() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function nowTime() {
+  const d = new Date();
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const rh = Math.max(7, Math.min(20, h));
+  const rm = m < 8 ? "00" : m < 23 ? "15" : m < 38 ? "30" : m < 53 ? "45" : "00";
+  const fh = rm === "00" && m >= 53 ? Math.min(20, rh + 1) : rh;
+  return `${String(fh).padStart(2, "0")}:${rm}`;
+}
+
+const TIME_SLOTS: string[] = [];
+for (let h = 7; h <= 20; h++) {
+  for (const m of ["00", "15", "30", "45"]) {
+    TIME_SLOTS.push(`${String(h).padStart(2, "0")}:${m}`);
+  }
 }
 
 function OrderPage() {
@@ -43,13 +62,15 @@ function OrderPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [transferReceivers, setTransferReceivers] = useState<TransferReceiver[]>([]);
 
   // 新訂單草稿
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [operatorId, setOperatorId] = useState("");
-  const [orderDate, setOrderDate] = useState(today());
+  const [orderDate, setOrderDate] = useState(now());
+  const [orderTime, setOrderTime] = useState(nowTime());
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -60,23 +81,46 @@ function OrderPage() {
   // 編輯
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editItems, setEditItems] = useState<OrderItem[]>([]);
+  const [editNewItems, setEditNewItems] = useState<DraftLine[]>([]);
+  const [editRemovedIds, setEditRemovedIds] = useState<string[]>([]);
+  const [editSelectedProductId, setEditSelectedProductId] = useState("");
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editCustomerPhone, setEditCustomerPhone] = useState("");
   const [editCustomerAddress, setEditCustomerAddress] = useState("");
   const [editOperatorName, setEditOperatorName] = useState("");
   const [editOrderDate, setEditOrderDate] = useState("");
+  const [editOrderTime, setEditOrderTime] = useState("07:00");
+  const [editIncludeTax, setEditIncludeTax] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
   // 列印用
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [printItems, setPrintItems] = useState<OrderItem[]>([]);
+  const [printScale, setPrintScale] = useState(1);
+
+  const calcPrintScale = useCallback(() => {
+    const pw = 9.5 * 96; // paper width in px
+    const ph = 5.5 * 96; // paper height in px
+    const toolbar = 60;   // toolbar + gaps
+    const pad = 48;       // padding around
+    const maxW = window.innerWidth - pad;
+    const maxH = window.innerHeight - toolbar - pad;
+    setPrintScale(Math.min(1, maxW / pw, maxH / ph));
+  }, []);
+
+  useEffect(() => {
+    if (!printOrder) return;
+    calcPrintScale();
+    window.addEventListener("resize", calcPrintScale);
+    return () => window.removeEventListener("resize", calcPrintScale);
+  }, [printOrder, calcPrintScale]);
 
   // 收款
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
   const [paymentBy, setPaymentBy] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
-  const [filterMonth, setFilterMonth] = useState(today().slice(0, 7));
+  const [filterMonth, setFilterMonth] = useState(now().slice(0, 7));
 
   useEffect(() => {
     const cSub = client.models.Customer.observeQuery().subscribe({
@@ -114,12 +158,16 @@ function OrderPage() {
     const paySub = client.models.Payment.observeQuery().subscribe({
       next: (data) => setPayments([...data.items]),
     });
+    const trSub = client.models.TransferReceiver.observeQuery().subscribe({
+      next: (data) => setTransferReceivers([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
     return () => {
       cSub.unsubscribe();
       pSub.unsubscribe();
       oSub.unsubscribe();
       opSub.unsubscribe();
       paySub.unsubscribe();
+      trSub.unsubscribe();
     };
   }, []);
 
@@ -180,7 +228,8 @@ function OrderPage() {
     setCustomerId("");
     setCustomerSearch("");
     setOperatorId("");
-    setOrderDate(today());
+    setOrderDate(now());
+    setOrderTime(nowTime());
     setNote("");
     setLines([]);
     setSelectedProductId("");
@@ -191,7 +240,7 @@ function OrderPage() {
     if (!customerId) { alert("請選擇客戶"); return; }
     if (!operatorId) { alert("請選擇工程師"); return; }
     if (lines.length === 0) { alert("請至少加入一項商品"); return; }
-    const shortage = lines.find((l) => l.quantity > l.stock);
+    const shortage = lines.find((l) => l.stock !== -1 && l.quantity > l.stock);
     if (shortage) {
       alert(`商品「${shortage.productName}」庫存不足（庫存 ${shortage.stock}，需求 ${shortage.quantity}）`);
       return;
@@ -203,6 +252,8 @@ function OrderPage() {
         operatorId,
         createdBy: currentUserName,
         orderDate,
+        orderTime,
+        totalOverride: total,
         note: note.trim() || undefined,
         items: JSON.stringify(
           lines.map((l) => ({ productId: l.productId, quantity: l.quantity }))
@@ -251,11 +302,17 @@ function OrderPage() {
     });
     setEditingOrder(order);
     setEditItems(items);
+    setEditNewItems([]);
+    setEditRemovedIds([]);
+    setEditSelectedProductId("");
     setEditCustomerName(order.customerName ?? "");
     setEditCustomerPhone(order.customerPhone ?? "");
     setEditCustomerAddress(order.customerAddress ?? "");
     setEditOperatorName(order.operatorName ?? "");
-    setEditOrderDate(order.orderDate ?? "");
+    setEditOrderDate((order.orderDate ?? "").slice(0, 10));
+    setEditOrderTime(order.orderTime ?? "07:00");
+    const itemsSubtotal = items.reduce((s, it) => s + (it.subtotal ?? 0), 0);
+    setEditIncludeTax(itemsSubtotal > 0 && (order.totalPrice ?? 0) > itemsSubtotal);
   }
 
   async function saveEdit() {
@@ -269,8 +326,10 @@ function OrderPage() {
         customerAddress: editCustomerAddress,
         operatorName: editOperatorName,
         orderDate: editOrderDate,
+        orderTime: editOrderTime,
       });
-      for (const it of editItems) {
+      // Update existing items (not removed)
+      for (const it of editItems.filter((i) => !editRemovedIds.includes(i.id))) {
         await client.models.OrderItem.update({
           id: it.id,
           productName: it.productName,
@@ -279,8 +338,29 @@ function OrderPage() {
           subtotal: it.subtotal,
         });
       }
+      // Delete removed items
+      for (const id of editRemovedIds) {
+        await client.models.OrderItem.delete({ id });
+      }
+      // Create new items
+      for (const nl of editNewItems) {
+        await client.models.OrderItem.create({
+          orderId: editingOrder.id,
+          productId: nl.productId,
+          productName: nl.productName,
+          unitPrice: nl.unitPrice,
+          quantity: nl.quantity,
+          subtotal: nl.subtotalOverride ?? nl.unitPrice * nl.quantity,
+        });
+      }
       // recalc total
-      const newTotal = editItems.reduce((s, it) => s + (it.subtotal ?? 0), 0);
+      const existingSubtotal = editItems
+        .filter((i) => !editRemovedIds.includes(i.id))
+        .reduce((s, it) => s + (it.subtotal ?? 0), 0);
+      const newSubtotal = editNewItems.reduce((s, l) => s + (l.subtotalOverride ?? l.unitPrice * l.quantity), 0);
+      const editSubtotal = existingSubtotal + newSubtotal;
+      const editTax = editIncludeTax ? editSubtotal * 0.05 : 0;
+      const newTotal = Math.ceil(editSubtotal + editTax);
       await client.models.Order.update({ id: editingOrder.id, totalPrice: newTotal });
       setEditingOrder(null);
     } catch (err) {
@@ -302,6 +382,70 @@ function OrderPage() {
       })
     );
   }
+
+  function removeEditItem(id: string) {
+    setEditRemovedIds((prev) => [...prev, id]);
+  }
+
+  function restoreEditItem(id: string) {
+    setEditRemovedIds((prev) => prev.filter((x) => x !== id));
+  }
+
+  function addEditNewItem() {
+    if (!editSelectedProductId) return;
+    const p = products.find((x) => x.id === editSelectedProductId);
+    if (!p) return;
+    const allProductIds = [
+      ...editItems.filter((i) => !editRemovedIds.includes(i.id)).map((i) => i.productId),
+      ...editNewItems.map((i) => i.productId),
+    ];
+    if (allProductIds.includes(p.id)) {
+      alert("此商品已在訂單中");
+      return;
+    }
+    setEditNewItems([
+      ...editNewItems,
+      {
+        productId: p.id,
+        productName: p.name ?? "",
+        unitPrice: p.unitPrice ?? 0,
+        quantity: 1,
+        stock: p.quantity ?? 0,
+        subtotalOverride: null,
+        subtotalRaw: "",
+      },
+    ]);
+    setEditSelectedProductId("");
+  }
+
+  function updateEditNewItemQty(productId: string, qty: number) {
+    setEditNewItems((prev) =>
+      prev.map((l) =>
+        l.productId === productId ? { ...l, quantity: Math.max(1, qty), subtotalOverride: null, subtotalRaw: "" } : l
+      )
+    );
+  }
+
+  function updateEditNewItemSubtotal(productId: string, value: string) {
+    const num = parseFloat(value);
+    setEditNewItems((prev) =>
+      prev.map((l) =>
+        l.productId === productId
+          ? { ...l, subtotalRaw: value, subtotalOverride: isNaN(num) ? l.subtotalOverride : num }
+          : l
+      )
+    );
+  }
+
+  function removeEditNewItem(productId: string) {
+    setEditNewItems((prev) => prev.filter((l) => l.productId !== productId));
+  }
+
+  const editSubtotalCalc = useMemo(() => {
+    const existing = editItems.filter((i) => !editRemovedIds.includes(i.id)).reduce((s, it) => s + (it.subtotal ?? 0), 0);
+    const added = editNewItems.reduce((s, l) => s + (l.subtotalOverride ?? l.unitPrice * l.quantity), 0);
+    return existing + added;
+  }, [editItems, editRemovedIds, editNewItems]);
 
   function openPayment(order: Order) {
     setPaymentOrder(order);
@@ -401,6 +545,12 @@ function OrderPage() {
             訂單日期 *
             <input required type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
           </label>
+          <label>
+            時間 *
+            <select required value={orderTime} onChange={(e) => setOrderTime(e.target.value)}>
+              {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
         </div>
 
         <div className="add-item-row">
@@ -408,7 +558,7 @@ function OrderPage() {
             <option value="">選擇商品加入訂單</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}（庫存 {p.quantity ?? 0}）— ${(p.unitPrice ?? 0).toFixed(2)}
+                {p.name}（庫存 {(p.quantity ?? 0) === -1 ? "∞" : (p.quantity ?? 0)}）— ${(p.unitPrice ?? 0).toFixed(2)}
               </option>
             ))}
           </select>
@@ -431,13 +581,13 @@ function OrderPage() {
                 <tr><td colSpan={5} className="empty">尚未加入商品</td></tr>
               )}
               {lines.map((l) => (
-                <tr key={l.productId} className={l.quantity > l.stock ? "out-of-stock" : ""}>
+                <tr key={l.productId} className={l.stock !== -1 && l.quantity > l.stock ? "out-of-stock" : ""}>
                   <td>{l.productName}</td>
                   <td>${l.unitPrice.toFixed(2)}</td>
                   <td>
                     <input className="qty-input" type="number" min="1" value={l.quantity}
                       onChange={(e) => updateLineQty(l.productId, parseInt(e.target.value, 10) || 1)} />
-                    <span className="stock-hint">/ 庫存 {l.stock}</span>
+                    <span className="stock-hint">/ 庫存 {l.stock === -1 ? "∞" : l.stock}</span>
                   </td>
                   <td>
                     <input className="subtotal-input" type="number" step="1" min="0"
@@ -488,6 +638,7 @@ function OrderPage() {
             <thead>
               <tr>
                 <th>日期</th>
+                <th>時間</th>
                 <th>客戶</th>
                 <th>電話</th>
                 <th>工程師</th>
@@ -498,21 +649,22 @@ function OrderPage() {
             </thead>
             <tbody>
               {filteredOrders.length === 0 && (
-                <tr><td colSpan={7} className="empty">此月份尚無訂單</td></tr>
+                <tr><td colSpan={8} className="empty">此月份尚無訂單</td></tr>
               )}
               {filteredOrders.map((o) => {
                 const pay = getPayment(o.id);
                 return (
                   <tr key={o.id}>
                     <td>{o.orderDate || "—"}</td>
+                    <td>{o.orderTime || "—"}</td>
                     <td>{o.customerName || "—"}</td>
                     <td>{o.customerPhone || "—"}</td>
                     <td>{o.operatorName || "—"}</td>
-                    <td className="num">${(o.totalPrice ?? 0).toFixed(2)}</td>
+                    <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
                     <td>{o.createdBy || "—"}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn-link" onClick={() => openEdit(o)}>編輯</button>
+                        {!pay && <button className="btn-link" onClick={() => openEdit(o)}>編輯</button>}
                         <button className="btn-link" onClick={() => openPrint(o)}>列印派工單</button>
                         {pay ? (
                           <span className="payment-badge">
@@ -569,6 +721,12 @@ function OrderPage() {
                   訂單日期
                   <input type="date" value={editOrderDate} onChange={(e) => setEditOrderDate(e.target.value)} />
                 </label>
+                <label>
+                  時間
+                  <select value={editOrderTime} onChange={(e) => setEditOrderTime(e.target.value)}>
+                    {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
               </div>
 
               <h3 style={{ margin: "16px 0 8px" }}>訂單項目</h3>
@@ -576,36 +734,93 @@ function OrderPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>商品名稱</th>
-                      <th>單價</th>
-                      <th>數量</th>
-                      <th>小計</th>
+                      <th style={{ width: "30%" }}>商品名稱</th>
+                      <th style={{ width: "15%" }}>單價</th>
+                      <th style={{ width: "15%" }}>數量</th>
+                      <th style={{ width: "20%" }}>小計</th>
+                      <th style={{ width: "20%" }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {editItems.map((it) => (
-                      <tr key={it.id}>
+                    {editItems.map((it) => {
+                      const removed = editRemovedIds.includes(it.id);
+                      return (
+                        <tr key={it.id} style={removed ? { opacity: 0.4, textDecoration: "line-through" } : undefined}>
+                          <td>
+                            <input value={it.productName ?? ""} disabled={removed}
+                              onChange={(e) => updateEditItem(it.id, "productName", e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="qty-input" type="number" step="0.01" disabled={removed}
+                              value={it.unitPrice ?? 0}
+                              onChange={(e) => updateEditItem(it.id, "unitPrice", e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="qty-input" type="number" min="1" disabled={removed}
+                              value={it.quantity ?? 0}
+                              onChange={(e) => updateEditItem(it.id, "quantity", e.target.value)} />
+                          </td>
+                          <td>${(it.subtotal ?? 0).toFixed(2)}</td>
+                          <td>
+                            {removed ? (
+                              <button className="btn-link" onClick={() => restoreEditItem(it.id)}>復原</button>
+                            ) : (
+                              <button className="btn-link danger" onClick={() => removeEditItem(it.id)}>移除</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {editNewItems.map((l) => (
+                      <tr key={l.productId}>
+                        <td>{l.productName}</td>
+                        <td>${l.unitPrice.toFixed(2)}</td>
                         <td>
-                          <input value={it.productName ?? ""} onChange={(e) => updateEditItem(it.id, "productName", e.target.value)} />
+                          <input className="qty-input" type="number" min="1" value={l.quantity}
+                            onChange={(e) => updateEditNewItemQty(l.productId, parseInt(e.target.value, 10) || 1)} />
                         </td>
                         <td>
-                          <input className="qty-input" type="number" step="0.01" value={it.unitPrice ?? 0}
-                            onChange={(e) => updateEditItem(it.id, "unitPrice", e.target.value)} />
+                          <input className="subtotal-input" type="number" step="1" min="0"
+                            value={l.subtotalRaw !== "" ? l.subtotalRaw : (l.subtotalOverride === null ? Math.round(l.unitPrice * l.quantity) : l.subtotalRaw)}
+                            onChange={(e) => updateEditNewItemSubtotal(l.productId, e.target.value)} />
                         </td>
                         <td>
-                          <input className="qty-input" type="number" min="1" value={it.quantity ?? 0}
-                            onChange={(e) => updateEditItem(it.id, "quantity", e.target.value)} />
+                          <button className="btn-link danger" onClick={() => removeEditNewItem(l.productId)}>移除</button>
                         </td>
-                        <td>${(it.subtotal ?? 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              <div className="add-item-row">
+                <select value={editSelectedProductId} onChange={(e) => setEditSelectedProductId(e.target.value)}>
+                  <option value="">選擇商品加入訂單</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}（庫存 {(p.quantity ?? 0) === -1 ? "∞" : (p.quantity ?? 0)}）— ${(p.unitPrice ?? 0).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn-secondary" onClick={addEditNewItem}>加入</button>
+              </div>
+
               <div className="order-total-row">
-                <span>總金額：<span className="order-total">
-                  ${editItems.reduce((s, it) => s + (it.subtotal ?? 0), 0).toFixed(2)}
-                </span></span>
+                <label className="tax-check">
+                  <input type="checkbox" checked={editIncludeTax} onChange={(e) => setEditIncludeTax(e.target.checked)} />
+                  含 5% 稅
+                </label>
+                <div className="total-detail">
+                  {editIncludeTax && (
+                    <>
+                      <span className="subtotal-line">小計：${editSubtotalCalc.toFixed(2)}</span>
+                      <span className="tax-line">稅金（5%）：${(editSubtotalCalc * 0.05).toFixed(2)}</span>
+                    </>
+                  )}
+                  <span>訂單總金額：<span className="order-total">
+                    ${Math.ceil(editSubtotalCalc * (editIncludeTax ? 1.05 : 1))}
+                  </span></span>
+                </div>
               </div>
 
               <div className="form-actions" style={{ marginTop: 16 }}>
@@ -632,7 +847,7 @@ function OrderPage() {
               <div className="form-grid">
                 <label>
                   收款方式 *
-                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as "CASH" | "TRANSFER")}>
+                  <select value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value as "CASH" | "TRANSFER"); setPaymentBy(""); }}>
                     <option value="CASH">現金</option>
                     <option value="TRANSFER">匯款</option>
                   </select>
@@ -641,9 +856,14 @@ function OrderPage() {
                   收款人 *
                   <select value={paymentBy} onChange={(e) => setPaymentBy(e.target.value)}>
                     <option value="">請選擇收款人</option>
-                    {operators.map((op) => (
-                      <option key={op.id} value={op.name}>{op.name}</option>
-                    ))}
+                    {paymentMethod === "CASH"
+                      ? operators.map((op) => (
+                          <option key={op.id} value={op.name}>{op.name}</option>
+                        ))
+                      : transferReceivers.map((r) => (
+                          <option key={r.id} value={r.name}>{r.name}</option>
+                        ))
+                    }
                   </select>
                 </label>
               </div>
@@ -665,7 +885,9 @@ function OrderPage() {
             <button className="btn-primary" onClick={() => window.print()}>列印</button>
             <button className="btn-secondary" onClick={() => setPrintOrder(null)}>關閉預覽</button>
           </div>
-          <DeliverySheet order={printOrder} items={printItems} />
+          <div className="print-preview-wrapper" style={{ transform: `scale(${printScale})` }}>
+            <DeliverySheet order={printOrder} items={printItems} />
+          </div>
         </div>
       )}
     </div>

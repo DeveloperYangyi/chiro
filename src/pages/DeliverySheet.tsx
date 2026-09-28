@@ -19,7 +19,7 @@ function DeliverySheet({ order, items }: Props) {
       <div className="ds-header">
         <div className="ds-title">派工單</div>
         <div className="ds-meta">
-          <div>訂單日期：{order.orderDate || "—"}</div>
+          <div>訂單日期：{order.orderDate || "—"} {order.orderTime || ""}</div>
           <div className="ds-orderno">單號：{order.id.slice(0, 8).toUpperCase()}</div>
         </div>
       </div>
@@ -28,7 +28,7 @@ function DeliverySheet({ order, items }: Props) {
         <div className="ds-row-inline">
           <span><span className="ds-label">客戶姓名：</span>{order.customerName || "—"}</span>
           <span><span className="ds-label">聯絡電話：</span>{order.customerPhone || "—"}</span>
-          <span><span className="ds-label">送貨地址：</span>{order.customerAddress || "—"}</span>
+          <span><span className="ds-label">地址：</span>{order.customerAddress || "—"}</span>
           <span className="ds-right"><span className="ds-label">工程師：</span>{order.operatorName || "—"}</span>
         </div>
       </div>
