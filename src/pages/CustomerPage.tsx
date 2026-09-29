@@ -6,12 +6,14 @@ type Customer = Schema["Customer"]["type"];
 type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
 type Payment = Schema["Payment"]["type"];
+type Device = Schema["Device"]["type"];
 
 const emptyForm = {
   name: "",
   phone: "",
   phone2: "",
   address: "",
+  device: [] as string[],
   note: "",
 };
 
@@ -29,6 +31,7 @@ function CustomerPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [importing, setImporting] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
 
   useEffect(() => {
     const sub = client.models.Customer.observeQuery().subscribe({
@@ -45,7 +48,10 @@ function CustomerPage() {
     const oiSub = client.models.OrderItem.observeQuery().subscribe({
       next: (data) => setOrderItems([...data.items]),
     });
-    return () => { sub.unsubscribe(); oSub.unsubscribe(); oiSub.unsubscribe(); };
+    const dSub = client.models.Device.observeQuery().subscribe({
+      next: (data) => setDevices([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
+    return () => { sub.unsubscribe(); oSub.unsubscribe(); oiSub.unsubscribe(); dSub.unsubscribe(); };
   }, []);
 
   function resetForm() {
@@ -150,6 +156,7 @@ function CustomerPage() {
       phone: form.phone.trim() || null,
       phone2: form.phone2.trim() || null,
       address: form.address.trim() || null,
+      device: form.device.length > 0 ? form.device.join(",") : null,
       note: form.note.trim() || null,
     };
     if (editingId) {
@@ -168,6 +175,7 @@ function CustomerPage() {
       phone: c.phone ?? "",
       phone2: c.phone2 ?? "",
       address: c.address ?? "",
+      device: c.device ? c.device.split(",") : [],
       note: c.note ?? "",
     });
   }
@@ -282,6 +290,26 @@ function CustomerPage() {
               placeholder="送貨地址"
             />
           </label>
+          <label>
+            設備
+            <div className="multi-select">
+              {devices.map((d) => (
+                <label key={d.id} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={form.device.includes(d.name)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...form.device, d.name]
+                        : form.device.filter((v) => v !== d.name);
+                      setForm({ ...form, device: next });
+                    }}
+                  />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+          </label>
           <label className="full">
             備註
             <input
@@ -344,6 +372,7 @@ function CustomerPage() {
                 <th>電話</th>
                 <th>電話2</th>
                 <th>地址</th>
+                <th>設備</th>
                 <th>最近訂單</th>
                 <th>備註</th>
                 <th>操作</th>
@@ -352,7 +381,7 @@ function CustomerPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     尚無客戶資料
                   </td>
                 </tr>
@@ -365,6 +394,7 @@ function CustomerPage() {
                   <td>{c.phone || "—"}</td>
                   <td>{c.phone2 || "—"}</td>
                   <td>{c.address || "—"}</td>
+                  <td>{c.device ? c.device.split(",").join("、") : "—"}</td>
                   <td>
                     {last ? (
                       <>

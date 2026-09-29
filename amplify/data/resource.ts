@@ -34,6 +34,13 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
+  // 設備
+  Device: a
+    .model({
+      name: a.string().required(),
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
   // 客戶
   Customer: a
     .model({
@@ -41,6 +48,7 @@ const schema = a.schema({
       phone: a.string(), // 電話號碼
       phone2: a.string(), // 第二電話號碼
       address: a.string(), // 地址
+      device: a.string(), // 設備
       note: a.string(), // 備註
       isActive: a.boolean().default(true), // 是否啟用
       orders: a.hasMany("Order", "customerId"), // 訂單歷史

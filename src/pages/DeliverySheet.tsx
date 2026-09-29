@@ -48,9 +48,9 @@ function DeliverySheet({ order, items }: Props) {
             <tr key={it.id}>
               <td className="ds-idx">{i + 1}</td>
               <td>{it.productName}</td>
-              <td className="ds-num">${(it.unitPrice ?? 0).toFixed(2)}</td>
+              <td className="ds-num">${Math.round(it.unitPrice ?? 0)}</td>
               <td className="ds-num">{it.quantity ?? 0}</td>
-              <td className="ds-num">${(it.subtotal ?? 0).toFixed(2)}</td>
+              <td className="ds-num">${Math.round(it.subtotal ?? 0)}</td>
             </tr>
           ))}
         </tbody>
@@ -60,8 +60,8 @@ function DeliverySheet({ order, items }: Props) {
         <div className="ds-total">
           {hasTax && (
             <>
-              <div>小計：${subtotal.toFixed(2)}</div>
-              <div>稅金（5%）：${tax.toFixed(2)}</div>
+              <div>小計：${Math.round(subtotal)}</div>
+              <div>稅金（5%）：${Math.round(tax)}</div>
             </>
           )}
           <div>

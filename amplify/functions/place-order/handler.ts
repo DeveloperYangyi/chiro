@@ -86,7 +86,7 @@ export const handler = async (event: HandlerArgs) => {
       const isBundle = bundleComponents.length > 0;
 
       // For regular items: validate item stock
-      if (!isBundle && !isInfinite && (product.quantity ?? 0) < qty) {
+      if (!isInfinite && (product.quantity ?? 0) < qty) {
         throw new Error(
           `商品「${product.name}」庫存不足（庫存 ${product.quantity ?? 0}，需求 ${qty}）`
         );
@@ -154,11 +154,10 @@ export const handler = async (event: HandlerArgs) => {
       if (itemErrors) throw new Error(itemErrors.map((e) => e.message).join("; "));
       if (item) createdItemIds.push(item.id);
 
-      // For bundles: only deduct component stock, not the bundle itself
-      // For regular items: deduct the item stock
       const isBundle = r.bundleComponents.length > 0;
 
-      if (!isBundle && !r.infinite) {
+      // Deduct the product's own stock (both regular and bundle)
+      if (!r.infinite) {
         const original = r.product.quantity ?? 0;
         const { errors: updateErrors } = await client.models.Product.update({
           id: r.product.id,
@@ -168,7 +167,7 @@ export const handler = async (event: HandlerArgs) => {
         deducted.push({ id: r.product.id, original });
       }
 
-      // Deduct bundle component stock
+      // Also deduct bundle component stock
       if (isBundle) {
         for (const comp of r.bundleComponents) {
           const { data: compProduct } = await client.models.Product.get({ id: comp.productId });

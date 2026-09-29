@@ -5,6 +5,7 @@ import { generateClient } from "aws-amplify/data";
 
 type Operator = Schema["Operator"]["type"];
 type TransferReceiver = Schema["TransferReceiver"]["type"];
+type Device = Schema["Device"]["type"];
 
 // Separate client for userPool-authenticated mutations
 const authClient = generateClient<Schema>({
@@ -44,6 +45,8 @@ function UserPage() {
 
   const [receivers, setReceivers] = useState<TransferReceiver[]>([]);
   const [newReceiverName, setNewReceiverName] = useState("");
+  const [deviceList, setDeviceList] = useState<Device[]>([]);
+  const [newDeviceName, setNewDeviceName] = useState("");
 
   useEffect(() => {
     const sub = client.models.Operator.observeQuery().subscribe({
@@ -57,7 +60,10 @@ function UserPage() {
     const rSub = client.models.TransferReceiver.observeQuery().subscribe({
       next: (data) => setReceivers([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
     });
-    return () => { sub.unsubscribe(); rSub.unsubscribe(); };
+    const devSub = client.models.Device.observeQuery().subscribe({
+      next: (data) => setDeviceList([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
+    });
+    return () => { sub.unsubscribe(); rSub.unsubscribe(); devSub.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -449,6 +455,52 @@ function UserPage() {
                   <td>
                     <button className="btn-link danger" onClick={() => {
                       if (confirm(`確定要刪除「${r.name}」嗎？`)) client.models.TransferReceiver.delete({ id: r.id });
+                    }}>刪除</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>設備管理</h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={newDeviceName}
+            onChange={(e) => setNewDeviceName(e.target.value)}
+            placeholder="輸入設備名稱"
+          />
+          <button
+            className="btn-primary"
+            onClick={() => {
+              if (!newDeviceName.trim()) { alert("請輸入名稱"); return; }
+              client.models.Device.create({ name: newDeviceName.trim() });
+              setNewDeviceName("");
+            }}
+          >
+            新增
+          </button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deviceList.length === 0 && (
+                <tr><td colSpan={2} className="empty">尚無設備</td></tr>
+              )}
+              {deviceList.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.name}</td>
+                  <td>
+                    <button className="btn-link danger" onClick={() => {
+                      if (confirm(`確定要刪除「${d.name}」嗎？`)) client.models.Device.delete({ id: d.id });
                     }}>刪除</button>
                   </td>
                 </tr>

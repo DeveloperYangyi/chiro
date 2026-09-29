@@ -83,7 +83,7 @@ function App() {
               className={tab === "users" ? "tab active" : "tab"}
               onClick={() => setTab("users")}
             >
-              人員管理
+              管理介面
             </button>
           )}
         </nav>

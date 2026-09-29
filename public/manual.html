@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>開羅客服管理系統 — 使用手冊</title>
+<style>
+  :root { --primary: #2563eb; --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #16a34a; --danger: #dc2626; --warn: #f59e0b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+  .wrapper { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 2rem; margin-bottom: 8px; }
+  h1 span { font-size: 1rem; color: var(--muted); font-weight: 400; display: block; margin-top: 4px; }
+  h2 { font-size: 1.4rem; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--primary); }
+  h3 { font-size: 1.1rem; margin: 24px 0 10px; }
+  p, li { margin-bottom: 8px; }
+  ul, ol { padding-left: 24px; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px 28px; margin: 24px 0 32px; }
+  .toc h2 { margin: 0 0 12px; border: none; font-size: 1.1rem; }
+  .toc ol { margin: 0; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: var(--primary); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 12px 0; }
+  .card h4 { margin-bottom: 6px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.82rem; font-weight: 600; }
+  .badge-admin { background: #dbeafe; color: #1d4ed8; }
+  .badge-all { background: #dcfce7; color: #166534; }
+  .tip { background: #eff6ff; border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.92rem; }
+  .warn { background: #fef9c3; border-left: 4px solid var(--warn); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 0.92rem; }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: step; padding-left: 36px; position: relative; margin-bottom: 10px; }
+  .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 24px; height: 24px; background: var(--primary); color: #fff; border-radius: 50%; text-align: center; line-height: 24px; font-size: 0.82rem; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: #f1f5f9; font-weight: 600; }
+  kbd { background: #f1f5f9; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 0.85rem; font-family: inherit; }
+  .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<h1>📘 開羅客服管理系統 — 使用手冊
+  <span>Chiro Customer Service Management System</span>
+</h1>
+
+<nav class="toc">
+  <h2>目錄</h2>
+  <ol>
+    <li><a href="#overview">系統概述</a></li>
+    <li><a href="#login">登入與權限</a></li>
+    <li><a href="#home">首頁（今日總覽）</a></li>
+    <li><a href="#stock">庫存管理</a></li>
+    <li><a href="#customers">客戶資料</a></li>
+    <li><a href="#orders">訂單與派工單</a></li>
+    <li><a href="#calendar">行事曆</a></li>
+    <li><a href="#finance">財務報表</a></li>
+    <li><a href="#users">人員管理</a></li>
+    <li><a href="#faq">常見問題</a></li>
+  </ol>
+</nav>
+
+<!-- 1. 系統概述 -->
+<h2 id="overview">1. 系統概述</h2>
+<p>開羅客服管理系統是一套專為服務型企業設計的全方位管理平台，涵蓋庫存、客戶、訂單、派工、收款及財務分析等核心功能。系統採用雲端架構（AWS Amplify），資料即時同步，支援多人同時操作。</p>
+
+<h3>功能模組一覽</h3>
+<table>
+  <thead><tr><th>模組</th><th>說明</th><th>權限</th></tr></thead>
+  <tbody>
+    <tr><td>首頁</td><td>今日訂單、營收、庫存警示、未收款總覽</td><td><span class="badge badge-all">全員</span></td></tr>
+    <tr><td>庫存管理</td><td>商品新增／編輯／刪除、庫存調整、組合商品</td><td><span class="badge badge-all">全員</span></td></tr>
+    <tr><td>客戶資料</td><td>客戶 CRUD、CSV 匯入、訂單歷史查詢</td><td><span class="badge badge-all">全員</span></td></tr>
+    <tr><td>訂單與派工單</td><td>建立訂單、編輯、收款、列印派工單</td><td><span class="badge badge-all">全員</span></td></tr>
+    <tr><td>行事曆</td><td>月曆檢視訂單排程，依工程師篩選</td><td><span class="badge badge-all">全員</span></td></tr>
+    <tr><td>財務報表</td><td>營收、淨利、成本分析</td><td><span class="badge badge-admin">管理員</span></td></tr>
+    <tr><td>人員管理</td><td>帳號管理、工程師管理、匯款收款人</td><td><span class="badge badge-admin">管理員</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 2. 登入與權限 -->
+<h2 id="login">2. 登入與權限</h2>
+<p>系統使用 AWS Cognito 進行身份驗證，所有使用者需以 Email 帳號登入。</p>
+<h3>角色說明</h3>
+<ul>
+  <li><strong>一般使用者</strong>：可使用首頁、庫存管理、客戶資料、訂單與派工單、行事曆。</li>
+  <li><strong>管理員（ADMINS）</strong>：除上述功能外，額外可使用<strong>財務報表</strong>與<strong>人員管理</strong>。</li>
+</ul>
+<div class="tip">💡 首次登入時，系統會要求更改臨時密碼。密碼需至少 8 字元，包含大寫、小寫、數字及符號。</div>
+
+<!-- 3. 首頁 -->
+<h2 id="home">3. 首頁（今日總覽）</h2>
+<p>登入後預設顯示首頁，提供當日營運狀況的快速摘要。</p>
+
+<h3>摘要卡片</h3>
+<table>
+  <thead><tr><th>卡片</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td>🛒 今日訂單</td><td>今日建立的訂單數量</td></tr>
+    <tr><td>💰 今日營收</td><td>今日所有訂單的總金額（含未收款）</td></tr>
+    <tr><td>⚠️ 低庫存警示</td><td>庫存數量 ≤ 5 的商品數量（不含無限庫存商品）</td></tr>
+    <tr><td>💳 未收款訂單</td><td>尚未收款的訂單數量</td></tr>
+  </tbody>
+</table>
+
+<h3>今日訂單列表</h3>
+<p>顯示今日所有訂單的時間、客戶、電話、地址、工程師、商品明細及總金額。</p>
+
+<h3>未收款訂單</h3>
+<p>列出所有尚未收款的訂單，可直接點擊「收款」按鈕進行收款操作。</p>
+
+<h3>庫存總覽</h3>
+<p>顯示所有商品的庫存數量，庫存不足的商品會以紅色標示。無限庫存商品顯示為「∞」。</p>
+
+<!-- 4. 庫存管理 -->
+<h2 id="stock">4. 庫存管理</h2>
+
+<h3>4.1 新增商品</h3>
+<ol class="steps">
+  <li>點擊「展開」按鈕開啟新增表單。</li>
+  <li>填寫商品名稱（必填）、單價（必填）、庫存數量。</li>
+  <li>若商品為服務類（如安裝工資），勾選「無限庫存」，系統將不追蹤庫存。</li>
+  <li>點擊「新增商品」完成。</li>
+</ol>
+
+<h3>4.2 編輯與刪除商品</h3>
+<ul>
+  <li>在庫存清單中點擊「編輯」可修改商品資訊。</li>
+  <li>點擊「刪除」可永久移除商品（需確認）。</li>
+</ul>
+
+<h3>4.3 快速調整庫存</h3>
+<p>在庫存清單的數量欄位中，使用 <kbd>−</kbd> 和 <kbd>+</kbd> 按鈕可快速增減庫存數量。</p>
+
+<h3>4.4 建立組合商品</h3>
+<p>組合商品可將多個單品打包為一個商品，下單時自動扣減各元件庫存。</p>
+<ol class="steps">
+  <li>點擊「建立組合」按鈕。</li>
+  <li>輸入組合名稱與組合單價。</li>
+  <li>在下方商品列表中點擊商品加入組合，並設定每組用量。</li>
+  <li>系統會自動計算可組數量（取各元件庫存的最小值）。</li>
+  <li>點擊「建立組合」完成。</li>
+</ol>
+<div class="tip">💡 搜尋欄位可快速篩選商品名稱。</div>
+
+<!-- 5. 客戶資料 -->
+<h2 id="customers">5. 客戶資料</h2>
+
+<h3>5.1 新增客戶</h3>
+<ol class="steps">
+  <li>點擊「展開」按鈕開啟新增表單。</li>
+  <li>填寫客戶姓名（必填）、電話（必填）、地址（必填）。</li>
+  <li>可選填第二電話及備註。</li>
+  <li>點擊「新增客戶」完成。</li>
+</ol>
+
+<h3>5.2 CSV 批次匯入</h3>
+<ol class="steps">
+  <li>點擊「下載範本」取得 CSV 範本檔案。</li>
+  <li>依範本格式填入客戶資料（標題列需包含：姓名、電話、電話2、地址、備註）。</li>
+  <li>點擊「匯入 CSV」選擇檔案，系統將自動匯入。</li>
+</ol>
+<div class="warn">⚠️ CSV 匯入不會檢查重複客戶，請確認資料無重複再匯入。</div>
+
+<h3>5.3 客戶清單</h3>
+<ul>
+  <li>支援搜尋姓名、電話或地址。</li>
+  <li>顯示每位客戶的最近一筆訂單資訊。</li>
+  <li>點擊「訂單歷史」可查看該客戶的所有歷史訂單及收款狀態。</li>
+  <li>點擊「編輯」可修改客戶資訊。</li>
+  <li>點擊「停用」可將客戶標記為停用（不會刪除資料）。</li>
+</ul>
+
+<!-- 6. 訂單與派工單 -->
+<h2 id="orders">6. 訂單與派工單</h2>
+
+<h3>6.1 建立新訂單</h3>
+<ol class="steps">
+  <li>點擊「展開」按鈕開啟訂單表單。</li>
+  <li>在客戶欄位輸入姓名或電話搜尋，從下拉選單中選擇客戶。</li>
+  <li>選擇負責的工程師。</li>
+  <li>設定訂單日期與時間（預設為當前日期與最近的 15 分鐘時段）。</li>
+  <li>從商品下拉選單中選擇商品，點擊「加入」。</li>
+  <li>調整各商品的數量，可手動修改小計金額。</li>
+  <li>如需含稅，勾選「含 5% 稅」。</li>
+  <li>確認總金額後，點擊「建立訂單」。</li>
+</ol>
+<div class="tip">💡 建立訂單時，系統會自動扣減庫存。若庫存不足，系統會提示警告。</div>
+<div class="warn">⚠️ 組合商品下單時，會自動扣減各元件的庫存數量。</div>
+
+<h3>6.2 訂單清單</h3>
+<ul>
+  <li>使用月份篩選器查看特定月份的訂單。</li>
+  <li>列表顯示日期、時間、客戶、電話、商品項目、工程師、總金額、建立者。</li>
+  <li>收款狀態會顯示收款方式（現金／匯款）、收款人及確認人。</li>
+</ul>
+
+<h3>6.3 編輯訂單</h3>
+<p>未收款的訂單可進行編輯：</p>
+<ul>
+  <li>修改客戶姓名、電話、地址。</li>
+  <li>變更工程師、訂單日期與時間。</li>
+  <li>調整現有商品的名稱、單價、數量。</li>
+  <li>移除商品（可復原）或新增商品。</li>
+  <li>切換含稅／不含稅。</li>
+</ul>
+<div class="tip">💡 編輯訂單時，系統會自動調整庫存（還原移除商品的庫存、扣減新增商品的庫存）。</div>
+
+<h3>6.4 收款</h3>
+<ol class="steps">
+  <li>在訂單列表中點擊「收款」按鈕。</li>
+  <li>選擇收款方式：現金或匯款。</li>
+  <li>選擇收款人（現金→工程師名單；匯款→匯款收款人名單）。</li>
+  <li>點擊「確認收款」完成。</li>
+</ol>
+<div class="warn">⚠️ 已收款的訂單無法編輯或刪除。</div>
+
+<h3>6.5 列印派工單</h3>
+<ol class="steps">
+  <li>在訂單列表中點擊「列印派工單」。</li>
+  <li>系統會顯示派工單預覽，包含訂單資訊、客戶資料、商品明細及總金額。</li>
+  <li>點擊「列印」按鈕使用瀏覽器列印功能輸出。</li>
+</ol>
+<p>派工單包含以下資訊：</p>
+<table>
+  <thead><tr><th>區塊</th><th>內容</th></tr></thead>
+  <tbody>
+    <tr><td>標題</td><td>派工單、訂單日期時間、單號</td></tr>
+    <tr><td>客戶資訊</td><td>客戶姓名、聯絡電話、地址、工程師</td></tr>
+    <tr><td>商品明細</td><td>商品名稱、單價、數量、小計</td></tr>
+    <tr><td>金額</td><td>小計、稅金（如有）、總金額</td></tr>
+    <tr><td>簽收欄</td><td>客戶簽收處</td></tr>
+  </tbody>
+</table>
+
+<h3>6.6 刪除訂單</h3>
+<p>未收款的訂單可進行軟刪除（資料不會真正移除，但不再顯示於列表中）。</p>
+
+<!-- 7. 行事曆 -->
+<h2 id="calendar">7. 行事曆</h2>
+<p>以月曆形式檢視所有訂單的排程，方便掌握每日工作安排。</p>
+
+<h3>功能說明</h3>
+<ul>
+  <li>使用 ◀ ▶ 按鈕切換月份。</li>
+  <li>使用工程師篩選器查看特定工程師的排程。</li>
+  <li>每個日期格顯示該日所有訂單，包含：時間、客戶姓名、工程師、商品明細。</li>
+  <li>今日日期會以特殊樣式標示。</li>
+</ul>
+
+<!-- 8. 財務報表 -->
+<h2 id="finance">8. 財務報表 <span class="badge badge-admin">僅管理員</span></h2>
+<p>財務報表提供三個子頁籤：營收、淨利、成本。</p>
+
+<h3>8.1 營收</h3>
+<div class="card">
+  <h4>營收總覽</h4>
+  <p>顯示四張摘要卡片：今日、本月、本季、本年的營收總額、已收款金額、未收款金額及訂單數。</p>
+</div>
+<div class="card">
+  <h4>訂單明細</h4>
+  <p>依日期分組顯示每筆訂單的詳細資訊，包含收款狀態、收款方式、收款人。可直接在此進行收款操作。</p>
+</div>
+
+<h3>8.2 淨利</h3>
+<div class="card">
+  <h4>淨利總覽</h4>
+  <p>顯示今日、本月、本季、本年的淨利（營收 − 成本）、已收款、未收款及成本金額。</p>
+</div>
+<div class="card">
+  <h4>訂單成本明細</h4>
+  <p>每筆訂單顯示營收、成本及淨利。可直接在表格中編輯訂單成本，輸入後點擊「儲存」。</p>
+  <p>淨利為正數時以綠色顯示，負數時以紅色顯示。</p>
+</div>
+
+<h3>8.3 成本</h3>
+<div class="card">
+  <h4>工程師成本分析</h4>
+  <p>依工程師分組顯示成本摘要卡片，可使用篩選器查看特定工程師。</p>
+</div>
+<div class="card">
+  <h4>訂單明細</h4>
+  <p>依日期分組顯示每筆訂單的營收、成本及淨利。</p>
+</div>
+
+<!-- 9. 人員管理 -->
+<h2 id="users">9. 人員管理 <span class="badge badge-admin">僅管理員</span></h2>
+
+<h3>9.1 帳號管理</h3>
+<p>管理系統登入帳號（Cognito 使用者）。</p>
+
+<h4>建立帳號</h4>
+<ol class="steps">
+  <li>輸入 Email（必填）與顯示名稱（必填）。</li>
+  <li>可選填臨時密碼（留空則自動產生並寄送至 Email）。</li>
+  <li>如需設為管理員，勾選「設為管理員」。</li>
+  <li>點擊「建立帳號」。</li>
+</ol>
+<div class="tip">💡 臨時密碼需至少 8 字元，包含大寫、小寫、數字及符號，7 天內有效。</div>
+
+<h4>帳號清單</h4>
+<table>
+  <thead><tr><th>欄位</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td>Email</td><td>登入帳號</td></tr>
+    <tr><td>顯示名稱</td><td>系統中顯示的使用者名稱</td></tr>
+    <tr><td>狀態</td><td>已確認 / 需更改密碼 / 未確認</td></tr>
+    <tr><td>角色</td><td>管理員 / 一般使用者</td></tr>
+    <tr><td>操作</td><td>設為管理員、刪除帳號</td></tr>
+  </tbody>
+</table>
+
+<h3>9.2 工程師管理</h3>
+<p>管理可指派至訂單的工程師名單。</p>
+<ol class="steps">
+  <li>輸入姓名（必填），可選填電話與備註。</li>
+  <li>點擊「新增工程師」。</li>
+</ol>
+<p>工程師清單支援搜尋姓名或電話，可編輯或刪除。</p>
+
+<h3>9.3 匯款收款人</h3>
+<p>管理匯款收款方式的收款人名單。在收款時選擇「匯款」方式時，會從此名單中選擇收款人。</p>
+<ol class="steps">
+  <li>輸入收款人名稱。</li>
+  <li>點擊「新增」。</li>
+</ol>
+
+<!-- 10. FAQ -->
+<h2 id="faq">10. 常見問題</h2>
+
+<div class="card">
+  <h4>Q：為什麼我看不到「財務報表」和「人員管理」？</h4>
+  <p>A：這兩個功能僅限管理員（ADMINS 群組）使用。請聯繫管理員將您的帳號加入管理員群組。</p>
+</div>
+
+<div class="card">
+  <h4>Q：訂單建立後可以修改嗎？</h4>
+  <p>A：可以，但僅限尚未收款的訂單。已收款的訂單無法編輯或刪除。</p>
+</div>
+
+<div class="card">
+  <h4>Q：刪除訂單後庫存會恢復嗎？</h4>
+  <p>A：訂單採用軟刪除，庫存不會自動恢復。如需調整庫存，請至庫存管理頁面手動調整。</p>
+</div>
+
+<div class="card">
+  <h4>Q：無限庫存（∞）是什麼意思？</h4>
+  <p>A：無限庫存適用於服務類商品（如安裝工資），系統不會追蹤其庫存數量，下單時也不會扣減。</p>
+</div>
+
+<div class="card">
+  <h4>Q：CSV 匯入客戶時需要什麼格式？</h4>
+  <p>A：CSV 檔案的第一列為標題列，需包含「姓名」欄位（必要），其他可選欄位為：電話、電話2、地址、備註。可先下載範本參考格式。</p>
+</div>
+
+<div class="card">
+  <h4>Q：組合商品的庫存如何計算？</h4>
+  <p>A：組合商品的可用數量 = 各元件庫存除以每組用量的最小值。若任一元件為無限庫存，則不納入計算。</p>
+</div>
+
+<div class="card">
+  <h4>Q：如何修改訂單的成本？</h4>
+  <p>A：在財務報表 → 淨利頁籤中，每筆訂單的成本欄位可直接輸入數值，修改後點擊「儲存」即可。</p>
+</div>
+
+<div class="footer">
+  <p>開羅客服管理系統 使用手冊 · 最後更新：2025 年</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -716,15 +716,15 @@ function OrderPage() {
           <table>
             <thead>
               <tr>
-                <th>日期</th>
-                <th>時間</th>
-                <th>客戶</th>
-                <th>電話</th>
-                <th>商品項目</th>
-                <th>工程師</th>
-                <th className="num">總金額</th>
-                <th>建立者</th>
-                <th>操作</th>
+                <th style={{ width: "8%" }}>日期</th>
+                <th style={{ width: "5%" }}>時間</th>
+                <th style={{ width: "8%" }}>客戶</th>
+                <th style={{ width: "7%" }}>電話</th>
+                <th style={{ width: "22%" }}>商品項目</th>
+                <th style={{ width: "7%" }}>工程師</th>
+                <th className="num" style={{ width: "7%" }}>總金額</th>
+                <th style={{ width: "6%" }}>建立者</th>
+                <th style={{ width: "15%" }}>操作</th>
               </tr>
             </thead>
             <tbody>
