@@ -9,6 +9,7 @@ interface Props {
 }
 
 function DeliverySheet({ order, items }: Props) {
+  const fmt = (n: number) => Math.round(n).toLocaleString();
   const subtotal = items.reduce((sum, it) => sum + (it.subtotal ?? 0), 0);
   const total = order.totalPrice ?? subtotal;
   const hasTax = total > subtotal && subtotal > 0;
@@ -16,6 +17,10 @@ function DeliverySheet({ order, items }: Props) {
 
   return (
     <div className="delivery-sheet">
+      <div className="ds-company">
+        <div className="ds-company-name">開羅健康管理顧問股份有限公司</div>
+        <div className="ds-company-tel">Tel: 02-2378-0689</div>
+      </div>
       <div className="ds-header">
         <div className="ds-title">派工單</div>
         <div className="ds-meta">
@@ -40,7 +45,7 @@ function DeliverySheet({ order, items }: Props) {
             <th>商品名稱</th>
             <th className="ds-num">單價</th>
             <th className="ds-num">數量</th>
-            <th className="ds-num">小計</th>
+            <th className="ds-num">金額</th>
           </tr>
         </thead>
         <tbody>
@@ -48,9 +53,9 @@ function DeliverySheet({ order, items }: Props) {
             <tr key={it.id}>
               <td className="ds-idx">{i + 1}</td>
               <td>{it.productName}</td>
-              <td className="ds-num">${Math.round(it.unitPrice ?? 0)}</td>
+              <td className="ds-num">${fmt(it.unitPrice ?? 0)}</td>
               <td className="ds-num">{it.quantity ?? 0}</td>
-              <td className="ds-num">${Math.round(it.subtotal ?? 0)}</td>
+              <td className="ds-num">${fmt(it.subtotal ?? 0)}</td>
             </tr>
           ))}
         </tbody>
@@ -60,13 +65,13 @@ function DeliverySheet({ order, items }: Props) {
         <div className="ds-total">
           {hasTax && (
             <>
-              <div>小計：${Math.round(subtotal)}</div>
-              <div>稅金（5%）：${Math.round(tax)}</div>
+              <div>合計：${fmt(subtotal)}</div>
+              <div>稅額：${fmt(tax)}</div>
             </>
           )}
           <div>
-            <span>總金額：</span>
-            <span className="ds-total-value">${Math.ceil(total)}</span>
+            <span>總計：</span>
+            <span className="ds-total-value">${fmt(Math.ceil(total))}</span>
           </div>
         </div>
         <div className="ds-sign">

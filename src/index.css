@@ -562,10 +562,24 @@ td.empty {
   padding: 0.3in 0.4in;
   color: #000;
   font-size: 12pt;
+  font-family: "BiauKai", "DFKai-SB", "標楷體", serif;
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
   border-radius: 2px;
+}
+
+.ds-company {
+  text-align: center;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.ds-company-name {
+  font-size: 15pt;
+  font-weight: 600;
+}
+.ds-company-tel {
+  font-size: 8pt;
 }
 
 .ds-header {
@@ -667,12 +681,12 @@ td.empty {
 }
 
 .ds-total {
-  font-size: 13pt;
+  font-size: 11pt;
   font-weight: 700;
 }
 
 .ds-total-value {
-  font-size: 16pt;
+  font-size: 11pt;
 }
 
 .ds-sign {
