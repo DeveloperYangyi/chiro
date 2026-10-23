@@ -7,6 +7,7 @@ type Order = Schema["Order"]["type"];
 type OrderItem = Schema["OrderItem"]["type"];
 type Payment = Schema["Payment"]["type"];
 type Device = Schema["Device"]["type"];
+type ContactLog = Schema["ContactLog"]["type"];
 
 const emptyForm = {
   name: "",
@@ -32,6 +33,10 @@ function CustomerPage() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [contactLogs, setContactLogs] = useState<ContactLog[]>([]);
+  const [contactCustomer, setContactCustomer] = useState<Customer | null>(null);
+  const [newContact, setNewContact] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
 
   useEffect(() => {
     const sub = client.models.Customer.observeQuery().subscribe({
@@ -51,7 +56,10 @@ function CustomerPage() {
     const dSub = client.models.Device.observeQuery().subscribe({
       next: (data) => setDevices([...data.items].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))),
     });
-    return () => { sub.unsubscribe(); oSub.unsubscribe(); oiSub.unsubscribe(); dSub.unsubscribe(); };
+    const clSub = client.models.ContactLog.observeQuery().subscribe({
+      next: (data) => setContactLogs([...data.items]),
+    });
+    return () => { sub.unsubscribe(); oSub.unsubscribe(); oiSub.unsubscribe(); dSub.unsubscribe(); clSub.unsubscribe(); };
   }, []);
 
   function resetForm() {
@@ -221,6 +229,45 @@ function CustomerPage() {
     return historyPayments.some((p) => p.orderId === orderId);
   }
 
+  function getContactLogs(customerId: string) {
+    return contactLogs
+      .filter((l) => l.customerId === customerId)
+      .sort((a, b) =>
+        (b.contactedAt ?? b.createdAt ?? "").localeCompare(a.contactedAt ?? a.createdAt ?? "")
+      );
+  }
+
+  async function handleAddContact(e: React.FormEvent) {
+    e.preventDefault();
+    if (!contactCustomer) return;
+    const content = newContact.trim();
+    if (!content) {
+      alert("請輸入電聯內容");
+      return;
+    }
+    setSavingContact(true);
+    try {
+      await client.models.ContactLog.create({
+        customerId: contactCustomer.id,
+        content,
+        contactedAt: new Date().toISOString(),
+      });
+      setNewContact("");
+    } catch (err) {
+      alert(err instanceof Error ? `新增失敗：${err.message}` : "新增失敗");
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  function fmtDateTime(iso?: string | null) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function getLastOrder(customerId: string) {
     const custOrders = orders
       .filter((o) => o.customerId === customerId)
@@ -375,19 +422,22 @@ function CustomerPage() {
                 <th>設備</th>
                 <th>最近訂單</th>
                 <th>備註</th>
+                <th>電聯紀錄</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="empty">
+                  <td colSpan={9} className="empty">
                     尚無客戶資料
                   </td>
                 </tr>
               )}
               {filtered.map((c) => {
                 const last = getLastOrder(c.id);
+                const logs = getContactLogs(c.id);
+                const latestLog = logs[0];
                 return (
                 <tr key={c.id}>
                   <td>{c.name}</td>
@@ -406,6 +456,26 @@ function CustomerPage() {
                     ) : "—"}
                   </td>
                   <td>{c.note || "—"}</td>
+                  <td>
+                    {latestLog ? (
+                      <button
+                        className="btn-link"
+                        onClick={() => setContactCustomer(c)}
+                        title="點擊查看全部電聯紀錄"
+                        style={{ textAlign: "left", padding: 0 }}
+                      >
+                        <div style={{ whiteSpace: "normal" }}>{latestLog.content}</div>
+                        <div className="muted" style={{ fontSize: "0.78rem" }}>
+                          {fmtDateTime(latestLog.contactedAt ?? latestLog.createdAt)}
+                          {logs.length > 1 ? `（共 ${logs.length} 筆）` : ""}
+                        </div>
+                      </button>
+                    ) : (
+                      <button className="btn-link" onClick={() => setContactCustomer(c)}>
+                        新增紀錄
+                      </button>
+                    )}
+                  </td>
                   <td>
                     <div className="row-actions">
                       <button className="btn-link" onClick={() => openHistory(c)}>
@@ -474,6 +544,57 @@ function CustomerPage() {
                           )}
                         </td>
                         <td className="num">${Math.ceil(o.totalPrice ?? 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contactCustomer && (
+        <div className="modal-overlay" onClick={() => setContactCustomer(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <div className="modal-head">
+              <h2>{contactCustomer.name} 的電聯紀錄</h2>
+              <button className="btn-close" onClick={() => setContactCustomer(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <form className="form-grid" onSubmit={handleAddContact} style={{ marginBottom: 16 }}>
+                <label className="full">
+                  新增電聯紀錄
+                  <textarea
+                    value={newContact}
+                    onChange={(e) => setNewContact(e.target.value)}
+                    placeholder="輸入電聯內容"
+                    rows={3}
+                  />
+                </label>
+                <div className="form-actions full">
+                  <button type="submit" className="btn-primary" disabled={savingContact}>
+                    {savingContact ? "新增中…" : "新增紀錄"}
+                  </button>
+                </div>
+              </form>
+              {getContactLogs(contactCustomer.id).length === 0 ? (
+                <p className="muted">尚無電聯紀錄</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "32%" }}>時間</th>
+                      <th>內容</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getContactLogs(contactCustomer.id).map((l) => (
+                      <tr key={l.id}>
+                        <td>{fmtDateTime(l.contactedAt ?? l.createdAt)}</td>
+                        <td style={{ whiteSpace: "pre-wrap" }}>{l.content}</td>
                       </tr>
                     ))}
                   </tbody>

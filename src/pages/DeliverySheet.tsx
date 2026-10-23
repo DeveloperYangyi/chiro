@@ -6,9 +6,10 @@ type OrderItem = Schema["OrderItem"]["type"];
 interface Props {
   order: Order;
   items: OrderItem[];
+  customerNote?: string | null;
 }
 
-function DeliverySheet({ order, items }: Props) {
+function DeliverySheet({ order, items, customerNote }: Props) {
   const fmt = (n: number) => Math.round(n).toLocaleString();
   const subtotal = items.reduce((sum, it) => sum + (it.subtotal ?? 0), 0);
   const total = order.totalPrice ?? subtotal;
@@ -18,8 +19,9 @@ function DeliverySheet({ order, items }: Props) {
   return (
     <div className="delivery-sheet">
       <div className="ds-company">
-        <div className="ds-company-name">開羅健康管理顧問股份有限公司</div>
-        <div className="ds-company-tel">Tel: 02-2378-0689</div>
+        <div className="ds-company-name">美聚迦南有限公司</div>
+        <div className="ds-company-address">台北市大安區和平東路二段76巷19弄14號3樓之2</div>
+        <div className="ds-company-tel">Tel: 02-2378-0889&nbsp;&nbsp;&nbsp;&nbsp;Fax: 02-2736-4141</div>
       </div>
       <div className="ds-header">
         <div className="ds-title">派工單</div>
@@ -61,21 +63,24 @@ function DeliverySheet({ order, items }: Props) {
         </tbody>
       </table>
 
-      <div className="ds-footer">
-        <div className="ds-total">
-          {hasTax && (
-            <>
-              <div>合計：${fmt(subtotal)}</div>
-              <div>稅額：${fmt(tax)}</div>
-            </>
-          )}
-          <div>
-            <span>總計：</span>
-            <span className="ds-total-value">${fmt(Math.ceil(total))}</span>
-          </div>
+      <div className="ds-total">
+        {hasTax && (
+          <>
+            <div>合計：${fmt(subtotal)}</div>
+            <div>稅額：${fmt(tax)}</div>
+          </>
+        )}
+        <div>
+          <span>總計：</span>
+          <span className="ds-total-value">${fmt(Math.ceil(total))}</span>
         </div>
+      </div>
+
+      <div className="ds-footer">
+        <div className="ds-note">備註：{customerNote || ""}</div>
         <div className="ds-sign">
-          <span>簽收：______________</span>
+          <span>工程師：</span>
+          <span className="ds-sign-customer">客戶簽收：</span>
         </div>
       </div>
     </div>

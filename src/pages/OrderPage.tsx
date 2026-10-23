@@ -98,6 +98,7 @@ function OrderPage() {
   // 列印用
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [printItems, setPrintItems] = useState<OrderItem[]>([]);
+  const [printCustomerNote, setPrintCustomerNote] = useState<string | null>(null);
   const [printScale, setPrintScale] = useState(1);
 
   const calcPrintScale = useCallback(() => {
@@ -288,6 +289,8 @@ function OrderPage() {
     const { data: items } = await client.models.OrderItem.list({
       filter: { orderId: { eq: order.id } },
     });
+    const cust = customers.find((c) => c.id === order.customerId);
+    setPrintCustomerNote(cust?.note ?? null);
     setPrintItems(items);
     setPrintOrder(order);
   }
@@ -969,7 +972,7 @@ function OrderPage() {
             <button className="btn-secondary" onClick={() => setPrintOrder(null)}>關閉預覽</button>
           </div>
           <div className="print-preview-wrapper" style={{ transform: `scale(${printScale})` }}>
-            <DeliverySheet order={printOrder} items={printItems} />
+            <DeliverySheet order={printOrder} items={printItems} customerNote={printCustomerNote} />
           </div>
         </div>
       )}

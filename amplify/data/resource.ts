@@ -52,6 +52,18 @@ const schema = a.schema({
       note: a.string(), // 備註
       isActive: a.boolean().default(true), // 是否啟用
       orders: a.hasMany("Order", "customerId"), // 訂單歷史
+      contactLogs: a.hasMany("ContactLog", "customerId"), // 電聯紀錄
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
+  // 電聯紀錄
+  ContactLog: a
+    .model({
+      customerId: a.id().required(), // 客戶 ID
+      customer: a.belongsTo("Customer", "customerId"),
+      content: a.string().required(), // 電聯內容
+      createdBy: a.string(), // 建立者
+      contactedAt: a.datetime(), // 電聯時間
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
